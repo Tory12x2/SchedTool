@@ -1,3 +1,4 @@
+import os
 import sqlite3
 from datetime import datetime
 
@@ -8,6 +9,10 @@ from config import DATABASE_PATH, MEMBER_ICONS, WEEKDAYS
 # SQLite接続
 # =========================
 # このファイルは「保存・取得・削除」だけを担当します。
+
+database_dir = os.path.dirname(DATABASE_PATH)
+if database_dir:
+    os.makedirs(database_dir, exist_ok=True)
 
 conn = sqlite3.connect(DATABASE_PATH)
 cursor = conn.cursor()

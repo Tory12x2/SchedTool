@@ -19,6 +19,30 @@ python main.py
 `ModuleNotFoundError: No module named 'discord'` が出る場合は、通常のPythonではなく
 このプロジェクト内の `venv` を使って起動してください。
 
+## Railwayで運用する
+
+RailwayではGitHubリポジトリを接続してデプロイします。
+
+1. Railwayで `New Project` を作成
+2. `Deploy from GitHub repo` でこのリポジトリを選択
+3. Serviceの `Variables` に次を追加
+
+```text
+DISCORD_TOKEN=Discord Bot Token
+```
+
+4. SQLiteを永続化するため、ServiceにVolumeを追加
+5. VolumeのMount Pathを `/app/data` に設定
+
+このBotはRailwayの `RAILWAY_VOLUME_MOUNT_PATH` があれば、その中に `schedule.db` を保存します。
+ローカル実行時は従来どおりプロジェクト直下の `schedule.db` を使います。
+
+起動コマンドは `railway.json` で次のように設定しています。
+
+```text
+python main.py
+```
+
 ## ファイルの役割
 
 - `main.py`: Botを起動するだけのファイルです。基本的には触りません。

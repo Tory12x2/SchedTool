@@ -32,9 +32,16 @@ MY_GUILD = discord.Object(id=GUILD_ID)
 # =========================
 # データ保存
 # =========================
-# SQLiteの保存先です。別名にすると別データとして扱えます。
+# SQLiteの保存先です。
+# Railway Volumeを使う場合は、RAILWAY_VOLUME_MOUNT_PATH 配下に保存します。
 
-DATABASE_PATH = "schedule.db"
+DATABASE_PATH = os.getenv(
+    "DATABASE_PATH",
+    os.path.join(
+        os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "."),
+        "schedule.db",
+    ),
+)
 
 
 # =========================
