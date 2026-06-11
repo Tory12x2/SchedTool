@@ -5,41 +5,282 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SchedTool</title>
   <style>
+    :root {
+      color-scheme: light;
+      --text: #202124;
+      --muted: #5f6368;
+      --line: #dadce0;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --accent: #1a73e8;
+    }
+    * {
+      box-sizing: border-box;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      line-height: 1.7;
+      line-height: 1.75;
       margin: 0;
-      color: #202124;
-      background: #f7f8fa;
+      color: var(--text);
+      background: var(--bg);
     }
     main {
-      max-width: 760px;
+      max-width: 960px;
       margin: 0 auto;
-      padding: 48px 20px;
+      padding: 44px 20px 64px;
+    }
+    header {
+      margin-bottom: 32px;
     }
     h1 {
-      margin-bottom: 8px;
-      font-size: 32px;
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.2;
     }
-    .links {
-      display: grid;
-      gap: 12px;
-      margin-top: 28px;
+    h2 {
+      margin: 36px 0 12px;
+      font-size: 22px;
+      line-height: 1.35;
+    }
+    h3 {
+      margin: 24px 0 8px;
+      font-size: 17px;
+    }
+    p {
+      margin: 0 0 12px;
     }
     a {
-      color: #1a73e8;
+      color: var(--accent);
       font-weight: 600;
+    }
+    code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #eef2f7;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95em;
+    }
+    section {
+      padding: 24px;
+      margin: 16px 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    ol,
+    ul {
+      padding-left: 1.4em;
+      margin: 8px 0 0;
+    }
+    li {
+      margin: 6px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: #fff;
+    }
+    th,
+    td {
+      padding: 10px;
+      border-top: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .lead {
+      color: var(--muted);
+      font-size: 17px;
+    }
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .links a {
+      padding: 8px 0;
+    }
+    .note {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    @media (max-width: 720px) {
+      main {
+        padding: 32px 14px 48px;
+      }
+      section {
+        padding: 18px;
+      }
+      table,
+      thead,
+      tbody,
+      tr,
+      th,
+      td {
+        display: block;
+      }
+      tr {
+        border-top: 1px solid var(--line);
+        padding: 8px 0;
+      }
+      th,
+      td {
+        border: 0;
+        padding: 4px 0;
+      }
+      th {
+        margin-top: 4px;
+      }
     }
   </style>
 </head>
 <body>
   <main>
-    <h1>SchedTool</h1>
-    <p>SchedToolは、Discordサーバー内で日程調整を行うためのBotです。</p>
-    <div class="links">
-      <a href="./terms.html">利用規約</a>
-      <a href="./privacy.html">プライバシーポリシー</a>
-    </div>
+    <header>
+      <h1>SchedTool</h1>
+      <p class="lead">SchedToolは、Discordサーバー内で日程調整、参加可否の集計、参加可能日の通知を行うためのBotです。</p>
+      <div class="links">
+        <a href="./terms.html">利用規約</a>
+        <a href="./privacy.html">プライバシーポリシー</a>
+      </div>
+    </header>
+
+    <section>
+      <h2>日程調整の流れ</h2>
+      <ol>
+        <li>管理者が <code>/schedule_setting</code> でイベント名と1回の日程調整日数を設定します。</li>
+        <li>管理者が <code>/schedule</code> で開始日を指定し、日程調整を作成します。</li>
+        <li>Botがチャンネルに日程範囲ボタンを表示します。</li>
+        <li>参加者は対象の日程ボタンを押し、自分だけに表示される画面で <code>◎</code> <code>△</code> <code>×</code> を選びます。</li>
+        <li>通知チャンネルには、日付ごとの参加可能人数と保留人数が表示されます。</li>
+        <li><code>月間日程表</code> ボタンを押すと、押した人だけに全員の入力状況が表示されます。</li>
+        <li>締切を過ぎると、対象の日程範囲は自動的に回答できなくなります。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>参加者向けの使い方</h2>
+      <h3>日程を回答する</h3>
+      <p>チャンネルに表示された日程範囲ボタンを押すと、自分だけに回答画面が表示されます。各日程について、参加可能なら <code>◎</code>、保留なら <code>△</code>、不参加なら <code>×</code> を押します。</p>
+      <h3>月間日程表を見る</h3>
+      <p><code>月間日程表</code> ボタンを押すと、押した人だけに全員の入力状況が表示されます。表示はメンバーごとの固定アイコンで行われます。</p>
+      <h3>自分のアイコンを設定する</h3>
+      <p><code>/my_icon icon:🍎</code> のように実行すると、月間日程表で使う自分のアイコンを設定できます。他のメンバーが使用中のアイコンは指定できません。</p>
+    </section>
+
+    <section>
+      <h2>管理者向けの初期設定</h2>
+      <ol>
+        <li><code>/notification_channel_setting</code> で集計や通知を送るチャンネルを設定します。</li>
+        <li>必要に応じて <code>/participant_role_setting</code> で日程調整の対象ロールを設定します。</li>
+        <li><code>/schedule_setting</code> でイベント名と日数を設定します。</li>
+        <li><code>/reminder_setting</code> で参加可能日の通知タイミングとコメントを設定します。</li>
+        <li>定期的に作成したい場合は <code>/auto_schedule_start</code> を実行します。</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>主なスラッシュコマンド</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>コマンド</th>
+            <th>対象</th>
+            <th>内容</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/schedule_setting</code></td>
+            <td>管理者</td>
+            <td>イベント名と1回で調整する日数を設定します。</td>
+          </tr>
+          <tr>
+            <td><code>/schedule</code></td>
+            <td>管理者</td>
+            <td>開始日を指定して日程調整を作成します。</td>
+          </tr>
+          <tr>
+            <td><code>/auto_schedule_start</code></td>
+            <td>管理者</td>
+            <td>指定した開始日を基準に、日程調整の自動作成を開始します。</td>
+          </tr>
+          <tr>
+            <td><code>/auto_schedule_stop</code></td>
+            <td>管理者</td>
+            <td>日程調整の自動作成を停止します。</td>
+          </tr>
+          <tr>
+            <td><code>/close</code></td>
+            <td>管理者</td>
+            <td>指定したイベントの日程調整を手動で終了します。</td>
+          </tr>
+          <tr>
+            <td><code>/delete</code></td>
+            <td>管理者</td>
+            <td>指定したイベントを削除します。</td>
+          </tr>
+          <tr>
+            <td><code>/notification_channel_setting</code></td>
+            <td>管理者</td>
+            <td>集計や通知を送るチャンネルを設定します。</td>
+          </tr>
+          <tr>
+            <td><code>/participant_role_setting</code></td>
+            <td>管理者</td>
+            <td>日程調整の対象にするロールを設定します。</td>
+          </tr>
+          <tr>
+            <td><code>/notification_mention_setting</code></td>
+            <td>管理者</td>
+            <td>参加可能日通知でメンションするかどうかを設定します。</td>
+          </tr>
+          <tr>
+            <td><code>/reminder_setting</code></td>
+            <td>管理者</td>
+            <td>参加可能日の通知タイミングと一言コメントを設定します。</td>
+          </tr>
+          <tr>
+            <td><code>/available_day_reminder_test</code></td>
+            <td>管理者</td>
+            <td>参加可能日通知の見た目をテスト送信します。</td>
+          </tr>
+          <tr>
+            <td><code>/admin_status</code></td>
+            <td>管理者</td>
+            <td>Bot設定や未回答者の状況を確認します。</td>
+          </tr>
+          <tr>
+            <td><code>/list</code></td>
+            <td>全員</td>
+            <td>作成済みイベントの一覧を表示します。</td>
+          </tr>
+          <tr>
+            <td><code>/result</code></td>
+            <td>全員</td>
+            <td>指定したイベントの集計を表示します。</td>
+          </tr>
+          <tr>
+            <td><code>/my_icon</code></td>
+            <td>全員</td>
+            <td>月間日程表で使う自分のアイコンを設定します。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>通知について</h2>
+      <p>参加可能日の通知は、設定した日時に通知チャンネルへ送信されます。対象者全員が予定を入力済みで、かつ <code>×</code> が1人もいない場合に通知されます。</p>
+      <p><code>△</code> は参加確率50%として扱い、保留人数に応じた決行確率を通知に表示します。</p>
+      <p class="note">通知タイミングやコメントは <code>/reminder_setting</code> で変更できます。</p>
+    </section>
   </main>
 </body>
 </html>
