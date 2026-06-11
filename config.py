@@ -24,7 +24,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
 # RESULT_CHANNEL_ID:
 #   /announce で結果を投稿するチャンネルIDです。
 
-GUILD_ID = 770542327642980362
+GUILD_ID = 1499218941090988102
 RESULT_CHANNEL_ID = 1504137724888748123
 MY_GUILD = discord.Object(id=GUILD_ID)
 
@@ -32,16 +32,9 @@ MY_GUILD = discord.Object(id=GUILD_ID)
 # =========================
 # データ保存
 # =========================
-# SQLiteの保存先です。
-# Railway Volumeを使う場合は、RAILWAY_VOLUME_MOUNT_PATH 配下に保存します。
+# SQLiteの保存先です。運用環境では DATABASE_PATH で保存先を指定できます。
 
-DATABASE_PATH = os.getenv(
-    "DATABASE_PATH",
-    os.path.join(
-        os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "."),
-        "schedule.db",
-    ),
-)
+DATABASE_PATH = os.getenv("DATABASE_PATH", "schedule.db")
 
 
 # =========================

@@ -1,7 +1,7 @@
 import discord
 
 from config import STATUS_LABELS
-from database import get_member_icon, get_users
+from database import get_member_icon, get_participant_role_id, get_users
 
 
 # =========================
@@ -11,7 +11,18 @@ from database import get_member_icon, get_users
 
 
 def get_all_members(guild):
+    role_id = get_participant_role_id(guild.id)
+    if role_id:
+        role = guild.get_role(role_id)
+        if role:
+            return [member for member in role.members if not member.bot]
+
     return [member for member in guild.members if not member.bot]
+
+
+def filter_participant_users(guild, user_ids):
+    participant_ids = {member.id for member in get_all_members(guild)}
+    return set(user_ids) & participant_ids
 
 
 def format_member_list(guild, user_ids):
@@ -61,8 +72,14 @@ def create_result_embed(guild, event_id, dates):
     )
 
     for date in dates:
-        available_users = get_users(event_id, date["value"], "available")
-        maybe_users = get_users(event_id, date["value"], "maybe")
+        available_users = filter_participant_users(
+            guild,
+            get_users(event_id, date["value"], "available", guild.id),
+        )
+        maybe_users = filter_participant_users(
+            guild,
+            get_users(event_id, date["value"], "maybe", guild.id),
+        )
 
         if all_member_count and len(available_users) == all_member_count:
             perfect_dates.append(date["label"])
@@ -85,14 +102,14 @@ def create_result_embed(guild, event_id, dates):
     return embed
 
 
-def create_personal_embed(guild, event_id, dates, user_id):
+def create_personal_embed(guild, event_id, dates, user_id, deadline_text=None):
     lines = []
 
     for date in dates:
         status_label = "未選択"
 
         for status, label in STATUS_LABELS.items():
-            users = get_users(event_id, date["value"], status)
+            users = get_users(event_id, date["value"], status, guild.id)
             if user_id in users:
                 status_label = label
                 break
@@ -105,7 +122,11 @@ def create_personal_embed(guild, event_id, dates, user_id):
         color=discord.Color.blue(),
     )
 
-    embed.set_footer(text="あなたの回答状況")
+    footer_text = "あなたの回答状況"
+    if deadline_text:
+        footer_text += f" / 締切: {deadline_text}"
+
+    embed.set_footer(text=footer_text)
     return embed
 
 
@@ -126,9 +147,18 @@ def create_monthly_table_embed(guild, event_id, dates):
         lines = []
 
         for date in month_dates:
-            available_users = get_users(event_id, date["value"], "available")
-            maybe_users = get_users(event_id, date["value"], "maybe")
-            no_users = get_users(event_id, date["value"], "no")
+            available_users = filter_participant_users(
+                guild,
+                get_users(event_id, date["value"], "available", guild.id),
+            )
+            maybe_users = filter_participant_users(
+                guild,
+                get_users(event_id, date["value"], "maybe", guild.id),
+            )
+            no_users = filter_participant_users(
+                guild,
+                get_users(event_id, date["value"], "no", guild.id),
+            )
             answered_user_ids.update(available_users)
             answered_user_ids.update(maybe_users)
             answered_user_ids.update(no_users)

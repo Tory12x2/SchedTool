@@ -19,3 +19,7 @@ venv/
 .DS_Store
 .idea/
 .vscode/
+
+# Local design assets
+SCHEDTOOL_icon.ai
+SCHEDTOOL_icon.jpg
