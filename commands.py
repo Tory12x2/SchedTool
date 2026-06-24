@@ -267,7 +267,7 @@ def setup_commands(client):
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="reminder_setting",
-        description="参加可能日の通知タイミングを設定",
+        description="開催日通知のタイミングを設定",
     )
     @app_commands.describe(
         days_before="何日前に通知するか。省略時は1日前",
@@ -297,7 +297,7 @@ def setup_commands(client):
         save_reminder_settings(days_before, hour, comment.strip(), interaction.guild.id)
 
         await interaction.response.send_message(
-            f"参加可能日の通知設定を保存しました。\n"
+            f"開催日通知の設定を保存しました。\n"
             f"通知タイミング: {days_before}日前の{hour}時\n"
             f"コメント: {comment.strip() or 'なし'}",
             ephemeral=True,
@@ -306,7 +306,7 @@ def setup_commands(client):
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="notification_channel_setting",
-        description="結果や参加可能日通知を送るチャンネルを設定",
+        description="結果や開催日通知を送るチャンネルを設定",
     )
     @app_commands.describe(
         channel="通知先にするテキストチャンネル",
@@ -325,7 +325,7 @@ def setup_commands(client):
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="notification_mention_setting",
-        description="参加可能日通知でメンションするか設定",
+        description="開催日通知でメンションするか設定",
     )
     @app_commands.describe(
         enabled="メンションする場合はTrue、しない場合はFalse",
@@ -436,7 +436,7 @@ def setup_commands(client):
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="available_day_reminder_test",
-        description="参加可能日通知をテスト送信",
+        description="開催日通知をテスト送信",
     )
     @app_commands.describe(
         event_id="イベントID",

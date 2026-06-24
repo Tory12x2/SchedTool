@@ -193,7 +193,7 @@
         <li>必要に応じて <code>/participant_role_setting</code> で日程調整の対象ロールを設定します。</li>
         <li><code>/schedule_setting</code> でイベント名と日数を設定します。</li>
         <li><code>/reminder_setting</code> で開催日通知のタイミングとコメントを設定します。</li>
-        <li>定期的に作成したい場合は <code>/auto_schedule_start</code> を実行します。</li>
+        <li>定期的に作成したい場合は、まず同じイベント名で1回手動作成してから <code>/auto_schedule_start</code> を実行します。</li>
       </ol>
     </section>
 
@@ -226,7 +226,7 @@
           <tr>
             <td><code>/auto_schedule_start</code></td>
             <td>管理者</td>
-            <td>指定したイベント名の最新の日程調整を基準に、次回分から自動作成を開始します。</td>
+            <td>指定したイベント名の最新の日程調整を基準に、次回分から自動作成を開始します。初回だけは同じイベント名で手動作成が必要です。</td>
           </tr>
           <tr>
             <td><code>/auto_schedule_stop</code></td>
@@ -292,6 +292,12 @@
       <p>開催日通知は、設定した日時に通知チャンネルへ送信されます。対象者全員が予定を入力済みで、かつ <code>×</code> が1人もいない場合に通知されます。</p>
       <p><code>△</code> は参加確率50%として扱い、保留者と開催確率を通知に表示します。</p>
       <p class="note">通知タイミングやコメントは <code>/reminder_setting</code> で変更できます。</p>
+    </section>
+
+    <section>
+      <h2>締切について</h2>
+      <p>回答締切は、各日程の2日前の終日までです。締切日の翌日0時以降に、対象の日程範囲ボタンが自動で無効化されます。</p>
+      <p class="note">開始日が当日の範囲は例外として、当日23:59まで回答できます。</p>
     </section>
   </main>
 </body>
