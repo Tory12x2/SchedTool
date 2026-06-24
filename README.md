@@ -69,6 +69,13 @@ python main.py
 
 起動に成功すると、Botが参加しているDiscordサーバーにスラッシュコマンドを同期します。
 
+## 管理者向けの初期設定
+
+Discordサーバー内に、日程調整用チャンネルと通知用チャンネルを分けて作っておくと運用しやすくなります。
+日程調整用チャンネルでは `/schedule` や `/auto_schedule_start` を実行し、通知用チャンネルは `/notification_channel_setting` で設定します。
+
+必要に応じて、日程調整の対象メンバー用ロールも作成し、`/participant_role_setting` で設定してください。
+
 ## よく使う流れ
 
 ### 日程調整を作成する
