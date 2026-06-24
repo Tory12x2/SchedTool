@@ -378,7 +378,7 @@ def ensure_guild_settings(guild_id):
         INSERT OR IGNORE INTO guild_settings
         VALUES (?, ?, 1, NULL, NULL, NULL, 0, NULL, NULL, NULL, 1, 21, '')
         """,
-        (guild_id, RESULT_CHANNEL_ID),
+        (guild_id, None),
     )
     conn.commit()
 
@@ -919,7 +919,7 @@ def get_result_channel_id(guild_id=GUILD_ID):
     )
     row = cursor.fetchone()
     if not row:
-        return RESULT_CHANNEL_ID
+        return None
     return row[0]
 
 
