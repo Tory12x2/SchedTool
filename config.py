@@ -1,47 +1,42 @@
 import os
 
-import discord
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+def get_int_env(name, default=0):
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    return int(value)
 
 
 # =========================
 # 環境変数
 # =========================
-# Botトークンは直接コードに書かず、環境変数から読み込みます。
-#
-# macOS / zsh の例:
-# export DISCORD_TOKEN="ここにBotトークン"
-#
-# 一時的に直接書いて試すこともできますが、GitHubに置く場合は必ず環境変数を使います。
+# Botトークンは直接コードに書かず、.env または環境変数から読み込みます。
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN", "")
 
 
 # =========================
 # Discordサーバー / 通知先
 # =========================
-# GUILD_ID:
-#   スラッシュコマンドを登録するDiscordサーバーIDです。
-#
 # RESULT_CHANNEL_ID:
-#   /announce で結果を投稿するチャンネルIDです。
+#   初期状態の通知先チャンネルIDです。未設定の場合はDiscord内の
+#   /notification_channel_setting で設定してください。
 
-GUILD_ID = 1499218941090988102
-RESULT_CHANNEL_ID = 1504137724888748123
-MY_GUILD = discord.Object(id=GUILD_ID)
+GUILD_ID = get_int_env("GUILD_ID")
+RESULT_CHANNEL_ID = get_int_env("RESULT_CHANNEL_ID")
 
 
 # =========================
 # データ保存
 # =========================
 # SQLiteの保存先です。
-# Railway Volumeを使う場合は、RAILWAY_VOLUME_MOUNT_PATH 配下に保存します。
 
-DATABASE_PATH = os.getenv(
-    "DATABASE_PATH",
-    os.path.join(
-        os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "."),
-        "schedule.db",
-    ),
-)
+DATABASE_PATH = os.getenv("DATABASE_PATH", "schedule.db")
 
 
 # =========================

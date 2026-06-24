@@ -144,7 +144,7 @@
   <main>
     <header>
       <h1>SchedTool</h1>
-      <p class="lead">SchedToolは、Discordサーバー内で日程調整、参加可否の集計、参加可能日の通知を行うためのBotです。</p>
+      <p class="lead">SchedToolは、Discordサーバー内で日程調整、参加可否の集計、開催日通知を行うためのBotです。</p>
       <div class="links">
         <a href="./terms.html">利用規約</a>
         <a href="./privacy.html">プライバシーポリシー</a>
@@ -158,7 +158,7 @@
         <li>管理者が <code>/schedule</code> で開始日を指定し、日程調整を作成します。</li>
         <li>Botがチャンネルに日程範囲ボタンを表示します。</li>
         <li>参加者は対象の日程ボタンを押し、自分だけに表示される画面で <code>◎</code> <code>△</code> <code>×</code> を選びます。</li>
-        <li>通知チャンネルには、日付ごとの参加可能人数と保留人数が表示されます。</li>
+        <li>通知チャンネルには、日付ごとの参加可能人数と保留者、開催確率が表示されます。</li>
         <li><code>月間日程表</code> ボタンを押すと、押した人だけに全員の入力状況が表示されます。</li>
         <li>締切を過ぎると、対象の日程範囲は自動的に回答できなくなります。</li>
       </ol>
@@ -180,7 +180,7 @@
         <li><code>/notification_channel_setting</code> で集計や通知を送るチャンネルを設定します。</li>
         <li>必要に応じて <code>/participant_role_setting</code> で日程調整の対象ロールを設定します。</li>
         <li><code>/schedule_setting</code> でイベント名と日数を設定します。</li>
-        <li><code>/reminder_setting</code> で参加可能日の通知タイミングとコメントを設定します。</li>
+        <li><code>/reminder_setting</code> で開催日通知のタイミングとコメントを設定します。</li>
         <li>定期的に作成したい場合は <code>/auto_schedule_start</code> を実行します。</li>
       </ol>
     </section>
@@ -239,17 +239,17 @@
           <tr>
             <td><code>/notification_mention_setting</code></td>
             <td>管理者</td>
-            <td>参加可能日通知でメンションするかどうかを設定します。</td>
+            <td>開催日通知でメンションするかどうかを設定します。</td>
           </tr>
           <tr>
             <td><code>/reminder_setting</code></td>
             <td>管理者</td>
-            <td>参加可能日の通知タイミングと一言コメントを設定します。</td>
+            <td>開催日通知のタイミングと一言コメントを設定します。</td>
           </tr>
           <tr>
             <td><code>/available_day_reminder_test</code></td>
             <td>管理者</td>
-            <td>参加可能日通知の見た目をテスト送信します。</td>
+            <td>開催日通知の見た目をテスト送信します。</td>
           </tr>
           <tr>
             <td><code>/admin_status</code></td>
@@ -259,7 +259,7 @@
           <tr>
             <td><code>/list</code></td>
             <td>全員</td>
-            <td>作成済みイベントの一覧を表示します。</td>
+            <td>作成済みイベントの一覧を実行者だけに表示します。</td>
           </tr>
           <tr>
             <td><code>/result</code></td>
@@ -277,8 +277,8 @@
 
     <section>
       <h2>通知について</h2>
-      <p>参加可能日の通知は、設定した日時に通知チャンネルへ送信されます。対象者全員が予定を入力済みで、かつ <code>×</code> が1人もいない場合に通知されます。</p>
-      <p><code>△</code> は参加確率50%として扱い、保留人数に応じた決行確率を通知に表示します。</p>
+      <p>開催日通知は、設定した日時に通知チャンネルへ送信されます。対象者全員が予定を入力済みで、かつ <code>×</code> が1人もいない場合に通知されます。</p>
+      <p><code>△</code> は参加確率50%として扱い、保留者と開催確率を通知に表示します。</p>
       <p class="note">通知タイミングやコメントは <code>/reminder_setting</code> で変更できます。</p>
     </section>
   </main>

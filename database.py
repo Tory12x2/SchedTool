@@ -223,9 +223,6 @@ def initialize_database():
         """
     )
 
-    migrate_legacy_data_to_default_guild()
-    initialize_default_guild_settings()
-
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS reminder_logs (
@@ -235,6 +232,9 @@ def initialize_database():
         )
         """
     )
+
+    migrate_legacy_data_to_default_guild()
+    initialize_default_guild_settings()
 
     cursor.execute(
         """
