@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from config import WEEKDAYS
 from database import (
     get_result_channel_id,
+    save_result_channel_id,
     save_event_dates,
     save_event_group_settings,
     save_event_settings,
@@ -91,7 +92,17 @@ async def create_schedule(client, guild, schedule_channel, event_name, start_dat
             guild_id=guild_id,
         )
 
-    result_channel = client.get_channel(get_result_channel_id(guild_id))
+    result_channel_id = get_result_channel_id(guild_id)
+    result_channel = client.get_channel(result_channel_id) if result_channel_id else None
+    if not result_channel:
+        if result_channel_id:
+            raise RuntimeError(
+                "通知チャンネルが見つかりません。/notification_channel_setting で通知先を設定してください。"
+            )
+
+        save_result_channel_id(schedule_channel.id, guild_id)
+        result_channel = schedule_channel
+
     if not result_channel:
         raise RuntimeError(
             "通知チャンネルが見つかりません。/notification_channel_setting で通知先を設定してください。"

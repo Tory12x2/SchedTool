@@ -59,7 +59,8 @@ DISCORD_TOKEN=your_discord_bot_token_here
 RESULT_CHANNEL_ID=123456789012345678
 ```
 
-未設定の場合は、Bot起動後にDiscordで `/notification_channel_setting` を実行してください。
+未設定の場合は、最初に日程調整を作成したチャンネルが通知先として自動保存されます。
+通知先を分けたい場合は、Bot起動後にDiscordで `/notification_channel_setting` を実行してください。
 
 ### 5. 起動する
 
@@ -73,6 +74,7 @@ python main.py
 
 Discordサーバー内に、日程調整用チャンネルと通知用チャンネルを分けて作っておくと運用しやすくなります。
 日程調整用チャンネルでは `/schedule` や `/auto_schedule_start` を実行し、通知用チャンネルは `/notification_channel_setting` で設定します。
+通知用チャンネルを未設定のまま使い始めた場合は、最初に日程調整を作成したチャンネルが通知先になります。
 
 必要に応じて、日程調整の対象メンバー用ロールも作成し、`/participant_role_setting` で設定してください。
 
