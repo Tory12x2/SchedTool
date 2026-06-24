@@ -43,14 +43,21 @@ class ScheduleClient(discord.Client):
         await self.sync_commands_to_guilds()
         await self.refresh_schedule_message_views()
 
+    async def on_guild_join(self, guild):
+        await self.sync_commands_to_guild(guild)
+
     async def sync_commands_to_guilds(self):
         for guild in self.guilds:
-            try:
-                self.tree.copy_global_to(guild=discord.Object(id=guild.id))
-                synced = await self.tree.sync(guild=discord.Object(id=guild.id))
-                print(f"{guild.name}: {len(synced)} 個のコマンドを同期しました")
-            except discord.DiscordException as error:
-                print(f"{guild.name}: コマンド同期に失敗しました / {error}")
+            await self.sync_commands_to_guild(guild)
+
+    async def sync_commands_to_guild(self, guild):
+        try:
+            guild_object = discord.Object(id=guild.id)
+            self.tree.copy_global_to(guild=guild_object)
+            synced = await self.tree.sync(guild=guild_object)
+            print(f"{guild.name}: {len(synced)} 個のコマンドを同期しました")
+        except discord.DiscordException as error:
+            print(f"{guild.name}: コマンド同期に失敗しました / {error}")
 
     async def refresh_schedule_message_views(self):
         refreshed_count = 0
