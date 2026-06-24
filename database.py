@@ -1077,6 +1077,51 @@ def get_event_list(guild_id=GUILD_ID):
     return [display_event_id(row[0]) for row in cursor.fetchall()]
 
 
+def get_latest_event_period(event_name, guild_id=GUILD_ID):
+    guild_prefix = f"{guild_id}:"
+    event_prefix = f"{event_name}_"
+    cursor.execute(
+        """
+        SELECT event_id, date
+        FROM event_dates
+        WHERE event_id LIKE ?
+        ORDER BY event_id, date
+        """,
+        (f"{guild_prefix}%",),
+    )
+
+    periods = {}
+    for stored_event_id, date_value in cursor.fetchall():
+        event_id = display_event_id(stored_event_id)
+        if not event_id.startswith(event_prefix):
+            continue
+
+        start_text = event_id[len(event_prefix):]
+        if len(start_text) != 8 or not start_text.isdigit():
+            continue
+
+        periods.setdefault(event_id, []).append(date_value)
+
+    if not periods:
+        return None
+
+    latest_event_id, latest_dates = max(
+        periods.items(),
+        key=lambda item: max(item[1]),
+    )
+    latest_dates = sorted(set(latest_dates))
+    last_date = datetime.strptime(latest_dates[-1], "%Y%m%d")
+    next_start_date = last_date + timedelta(days=1)
+
+    return {
+        "event_id": latest_event_id,
+        "days": len(latest_dates),
+        "start_date": latest_dates[0],
+        "end_date": latest_dates[-1],
+        "next_start_date": next_start_date.strftime("%Y-%m-%d"),
+    }
+
+
 def get_dates(event_id, guild_id=GUILD_ID):
     event_id = to_storage_event_id(guild_id, event_id)
     cursor.execute(
@@ -1152,7 +1197,8 @@ def get_users(event_id, date, status=None, guild_id=GUILD_ID):
     return {row[0] for row in cursor.fetchall()}
 
 
-def set_user_status(event_id, date, user_id, status):
+def set_user_status(event_id, date, user_id, status, guild_id=GUILD_ID):
+    event_id = to_storage_event_id(guild_id, event_id)
     cursor.execute(
         """
         DELETE FROM availability

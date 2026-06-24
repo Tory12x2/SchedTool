@@ -191,19 +191,22 @@ def build_available_day_reminder_text(
     if mention_enabled:
         available_text = " ".join(f"<@{user_id}>" for user_id in sorted(available_users))
         available_text = available_text or "なし"
+        maybe_text = " ".join(f"<@{user_id}>" for user_id in sorted(maybe_users))
+        maybe_text = maybe_text or "なし"
     else:
         available_text = f"{len(available_users)}人" if available_users else "なし"
+        maybe_text = f"{len(maybe_users)}人" if maybe_users else "なし"
 
     maybe_count = len(maybe_users)
     probability = 100 * (0.5 ** maybe_count)
     comment_line = f"\n{comment}" if comment else ""
 
     return (
-        f"参加可能日のお知らせ\n"
+        f"開催日のお知らせ\n"
         f"イベント: {event_id}\n"
         f"日程: {label}\n"
         f"参加可能: {available_text}\n"
-        f"保留: {maybe_count}人\n"
-        f"決行確率: {probability:g}%"
+        f"保留: {maybe_text}\n"
+        f"開催確率: {probability:g}%…保留の方は確定次第コメントください"
         f"{comment_line}"
     )

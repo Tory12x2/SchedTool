@@ -11,6 +11,7 @@ from database import (
     get_auto_schedule_settings,
     get_dates,
     get_event_list,
+    get_latest_event_period,
     get_notification_mention_enabled,
     get_participant_role_id,
     get_result_channel_id,
@@ -124,31 +125,14 @@ def setup_commands(client):
         description="日程調整の自動作成を開始",
     )
     @app_commands.describe(
-        first_start="最初に調整する開始日 YYYY-MM-DD",
+        event_name="自動作成するイベント名",
         lead_days="開始日の何日前に日程調整を出すか。省略時は5日前",
     )
     async def auto_schedule_start(
         interaction,
-        first_start: str,
+        event_name: str,
         lead_days: int = 5,
     ):
-        settings = get_schedule_settings(interaction.guild.id)
-        if not settings:
-            await interaction.response.send_message(
-                "先に /schedule_setting でイベント名と日数を設定してください。",
-                ephemeral=True,
-            )
-            return
-
-        try:
-            first_start_date = datetime.strptime(first_start, "%Y-%m-%d")
-        except ValueError:
-            await interaction.response.send_message(
-                "日付形式は YYYY-MM-DD で入力してください。",
-                ephemeral=True,
-            )
-            return
-
         if lead_days < 0:
             await interaction.response.send_message(
                 "何日前に出すかは0以上で指定してください。",
@@ -156,16 +140,41 @@ def setup_commands(client):
             )
             return
 
+        event_name = event_name.strip()
+        if not event_name:
+            await interaction.response.send_message(
+                "イベント名を入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        latest_period = get_latest_event_period(event_name, interaction.guild.id)
+        if not latest_period:
+            await interaction.response.send_message(
+                f"{event_name} の日程調整がまだ見つかりません。\n"
+                "先に手動で1回作成してから、自動作成を開始してください。",
+                ephemeral=True,
+            )
+            return
+
+        save_schedule_settings(
+            event_name,
+            latest_period["days"],
+            interaction.guild.id,
+        )
         save_auto_schedule_settings(
             interaction.channel.id,
-            first_start_date.strftime("%Y-%m-%d"),
+            latest_period["next_start_date"],
             lead_days,
             interaction.guild.id,
         )
 
         await interaction.response.send_message(
             f"自動作成を開始しました。\n"
-            f"最初の開始日: {first_start_date.strftime('%Y-%m-%d')}\n"
+            f"イベント名: {event_name}\n"
+            f"基準にした日程調整: {latest_period['event_id']}\n"
+            f"1回の日数: {latest_period['days']}日\n"
+            f"次回開始日: {latest_period['next_start_date']}\n"
             f"投稿タイミング: 開始日の{lead_days}日前\n"
             f"投稿先: このチャンネル",
             ephemeral=True,
@@ -176,7 +185,11 @@ def setup_commands(client):
         name="auto_schedule_stop",
         description="日程調整の自動作成を停止",
     )
-    async def auto_schedule_stop(interaction):
+    @app_commands.describe(
+        event_name="自動作成を停止するイベント名",
+    )
+    async def auto_schedule_stop(interaction, event_name: str):
+        event_name = event_name.strip()
         auto_settings = get_auto_schedule_settings(interaction.guild.id)
         if not auto_settings or not auto_settings["active"]:
             await interaction.response.send_message(
@@ -185,9 +198,19 @@ def setup_commands(client):
             )
             return
 
+        settings = get_schedule_settings(interaction.guild.id)
+        active_event_name = settings["event_name"] if settings else ""
+        if event_name != active_event_name:
+            await interaction.response.send_message(
+                f"{event_name} の自動作成は動いていません。\n"
+                f"現在動いている自動作成: {active_event_name or '不明'}",
+                ephemeral=True,
+            )
+            return
+
         stop_auto_schedule(interaction.guild.id)
         await interaction.response.send_message(
-            "日程調整の自動作成を停止しました。",
+            f"{event_name} の自動作成を停止しました。",
             ephemeral=True,
         )
 
@@ -362,11 +385,14 @@ def setup_commands(client):
     async def list_events(interaction):
         events = get_event_list(interaction.guild.id)
         if not events:
-            await interaction.response.send_message("イベントが存在しません")
+            await interaction.response.send_message(
+                "イベントが存在しません",
+                ephemeral=True,
+            )
             return
 
         text = "イベント一覧\n\n" + "\n".join(f"・{event_id}" for event_id in events)
-        await interaction.response.send_message(text)
+        await interaction.response.send_message(text, ephemeral=True)
 
     @client.tree.command(
         name="result",
