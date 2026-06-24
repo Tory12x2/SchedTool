@@ -4,13 +4,17 @@ import discord
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from config import STATUS_LABELS, STATUS_ORDER
+from config import MAX_DAYS, STATUS_LABELS, STATUS_ORDER
 from database import (
     get_dates,
     get_event_group_settings,
     get_event_settings,
+    get_result_channel_id,
+    get_schedule_settings,
     get_result_message,
     get_users,
+    save_result_channel_id,
+    save_schedule_settings,
     set_user_status,
 )
 from embeds import create_monthly_table_embed, create_personal_embed, create_result_embed
@@ -24,6 +28,110 @@ from embeds import create_monthly_table_embed, create_personal_embed, create_res
 
 
 TIMEZONE = ZoneInfo("Asia/Tokyo")
+
+
+def build_setup_status_text(guild):
+    schedule_settings = get_schedule_settings(guild.id)
+    result_channel_id = get_result_channel_id(guild.id)
+    result_channel = guild.get_channel(result_channel_id) if result_channel_id else None
+
+    schedule_text = (
+        f"{schedule_settings['event_name']} / {schedule_settings['days']}日"
+        if schedule_settings
+        else "未設定"
+    )
+    channel_text = result_channel.mention if result_channel else "未設定"
+
+    return (
+        "SchedTool 初期設定\n\n"
+        f"通知チャンネル: {channel_text}\n"
+        f"イベント設定: {schedule_text}\n\n"
+        "1. 通知を送りたいチャンネルで「このチャンネルを通知先にする」を押します。\n"
+        "2. 「イベント名と日数を設定する」で、日程調整の基本設定を保存します。\n"
+        "3. 設定後、/schedule start:YYYY-MM-DD で日程調整を作成できます。"
+    )
+
+
+class SetupSettingsModal(discord.ui.Modal, title="イベント名と日数を設定"):
+    event_name = discord.ui.TextInput(
+        label="イベント名",
+        placeholder="例: 定例会",
+        max_length=80,
+    )
+    days = discord.ui.TextInput(
+        label=f"日数（1〜{MAX_DAYS}）",
+        placeholder="例: 10",
+        max_length=2,
+    )
+
+    async def on_submit(self, interaction):
+        event_name = str(self.event_name.value).strip()
+        days_text = str(self.days.value).strip()
+
+        if not event_name:
+            await interaction.response.send_message(
+                "イベント名を入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            days = int(days_text)
+        except ValueError:
+            await interaction.response.send_message(
+                "日数は数字で入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        if days < 1 or days > MAX_DAYS:
+            await interaction.response.send_message(
+                f"日数は1〜{MAX_DAYS}日の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        save_schedule_settings(event_name, days, interaction.guild.id)
+        await interaction.response.send_message(
+            f"イベント設定を保存しました。\n"
+            f"イベント名: {event_name}\n"
+            f"日数: {days}日\n\n"
+            "次に /schedule start:YYYY-MM-DD で日程調整を作成できます。",
+            ephemeral=True,
+        )
+
+
+class SetupView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=900)
+
+    @discord.ui.button(
+        label="このチャンネルを通知先にする",
+        style=discord.ButtonStyle.primary,
+    )
+    async def set_notification_channel(self, interaction, button):
+        save_result_channel_id(interaction.channel.id, interaction.guild.id)
+        await interaction.response.send_message(
+            f"通知チャンネルを {interaction.channel.mention} に設定しました。",
+            ephemeral=True,
+        )
+
+    @discord.ui.button(
+        label="イベント名と日数を設定する",
+        style=discord.ButtonStyle.secondary,
+    )
+    async def open_schedule_settings(self, interaction, button):
+        await interaction.response.send_modal(SetupSettingsModal())
+
+    @discord.ui.button(
+        label="現在の設定を確認する",
+        style=discord.ButtonStyle.secondary,
+    )
+    async def show_current_settings(self, interaction, button):
+        await interaction.response.send_message(
+            build_setup_status_text(interaction.guild),
+            ephemeral=True,
+        )
 
 
 def build_custom_id(prefix, guild_id, event_id, *parts):

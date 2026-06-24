@@ -154,7 +154,7 @@
     <section>
       <h2>日程調整の流れ</h2>
       <ol>
-        <li>管理者が <code>/schedule_setting</code> でイベント名と1回の日程調整日数を設定します。</li>
+        <li>管理者が最初に <code>/setup</code> を実行し、通知チャンネル、イベント名、日数を設定します。</li>
         <li>管理者が <code>/schedule</code> で開始日を指定し、日程調整を作成します。</li>
         <li>Botがチャンネルに日程範囲ボタンを表示します。</li>
         <li>参加者は対象の日程ボタンを押し、自分だけに表示される画面で <code>◎</code> <code>△</code> <code>×</code> を選びます。</li>
@@ -177,6 +177,7 @@
     <section>
       <h2>管理者向けの初期設定</h2>
       <ol>
+        <li>最初に <code>/setup</code> を実行すると、ボタンと入力フォームで初期設定を進められます。</li>
         <li>Discordサーバー内に、日程調整用チャンネルと通知用チャンネルを分けて作っておくと運用しやすくなります。</li>
         <li>通知用チャンネルを未設定のまま使い始めた場合は、最初に日程調整を作成したチャンネルが通知先になります。</li>
         <li><code>/notification_channel_setting</code> で集計や通知を送るチャンネルを設定します。</li>
@@ -198,6 +199,11 @@
           </tr>
         </thead>
         <tbody>
+          <tr>
+            <td><code>/setup</code></td>
+            <td>管理者</td>
+            <td>通知チャンネル、イベント名、日数の初期設定を案内します。</td>
+          </tr>
           <tr>
             <td><code>/schedule_setting</code></td>
             <td>管理者</td>

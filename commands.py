@@ -29,6 +29,7 @@ from database import (
 )
 from embeds import create_result_embed
 from schedule_service import create_schedule
+from views import SetupView, build_setup_status_text
 
 
 # =========================
@@ -39,6 +40,18 @@ from schedule_service import create_schedule
 
 
 def setup_commands(client):
+    @app_commands.checks.has_permissions(administrator=True)
+    @client.tree.command(
+        name="setup",
+        description="SchedToolの初期設定を案内",
+    )
+    async def setup(interaction):
+        await interaction.response.send_message(
+            build_setup_status_text(interaction.guild),
+            view=SetupView(),
+            ephemeral=True,
+        )
+
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="schedule_setting",
@@ -576,6 +589,7 @@ def setup_commands(client):
 
     announce.error(admin_command_error)
     available_day_reminder_test.error(admin_command_error)
+    setup.error(admin_command_error)
     schedule_setting.error(admin_command_error)
     schedule.error(admin_command_error)
     auto_schedule_start.error(admin_command_error)
