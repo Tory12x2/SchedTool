@@ -407,21 +407,6 @@ def setup_commands(client):
         text = "イベント一覧\n\n" + "\n".join(f"・{event_id}" for event_id in events)
         await interaction.response.send_message(text, ephemeral=True)
 
-    @client.tree.command(
-        name="result",
-        description="イベント結果表示",
-    )
-    @app_commands.describe(event_id="イベントID")
-    async def result(interaction, event_id: str):
-        dates = get_dates(event_id, interaction.guild.id)
-        if not dates:
-            await interaction.response.send_message("イベントが見つかりません")
-            return
-
-        await interaction.response.send_message(
-            embed=create_result_embed(interaction.guild, event_id, dates)
-        )
-
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="announce",
