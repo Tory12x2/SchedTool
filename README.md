@@ -7,6 +7,8 @@ Discord用の日程調整Botです。
 イベントごとに日程候補を作成し、メンバーが `◎ / △ / ×` ボタンで回答できます。
 回答結果の集計、月間日程表、締切、自動作成、開催日通知に対応しています。
 
+![SchedTool UI Flow](docs/assets/SchedTool_UI-Flow.gif)
+
 ## セットアップ
 
 ### 1. Discord Botを作成する

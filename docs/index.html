@@ -110,6 +110,14 @@
       color: var(--muted);
       font-size: 14px;
     }
+    .demo {
+      display: block;
+      width: min(100%, 400px);
+      height: auto;
+      margin: 24px auto 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
     @media (max-width: 720px) {
       main {
         padding: 32px 14px 48px;
@@ -145,6 +153,7 @@
     <header>
       <h1>SchedTool</h1>
       <p class="lead">SchedToolは、Discordサーバー内で日程調整、参加可否の集計、開催日通知を行うためのBotです。</p>
+      <img class="demo" src="./assets/SchedTool_UI-Flow.gif" alt="SchedToolの初期設定と日程調整の流れ">
       <div class="links">
         <a href="./terms.html">利用規約</a>
         <a href="./privacy.html">プライバシーポリシー</a>
