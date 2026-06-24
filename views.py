@@ -46,7 +46,7 @@ def build_setup_status_text(guild):
         "SchedTool 初期設定\n\n"
         f"通知チャンネル: {channel_text}\n"
         f"イベント設定: {schedule_text}\n\n"
-        "1. 通知を送りたいチャンネルで「このチャンネルを通知先にする」を押します。\n"
+        "1. 「通知チャンネルを設定」から、集計や通知を送るチャンネルを選びます。\n"
         "2. 「イベント名と日数を設定する」で、日程調整の基本設定を保存します。\n"
         "3. 設定後、/schedule start:YYYY-MM-DD で日程調整を作成できます。"
     )
@@ -105,14 +105,18 @@ class SetupView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=900)
 
-    @discord.ui.button(
-        label="このチャンネルを通知先にする",
-        style=discord.ButtonStyle.primary,
+    @discord.ui.select(
+        cls=discord.ui.ChannelSelect,
+        placeholder="通知チャンネルを設定",
+        channel_types=[discord.ChannelType.text],
+        min_values=1,
+        max_values=1,
     )
-    async def set_notification_channel(self, interaction, button):
-        save_result_channel_id(interaction.channel.id, interaction.guild.id)
+    async def set_notification_channel(self, interaction, select):
+        channel = select.values[0]
+        save_result_channel_id(channel.id, interaction.guild.id)
         await interaction.response.send_message(
-            f"通知チャンネルを {interaction.channel.mention} に設定しました。",
+            f"通知チャンネルを {channel.mention} に設定しました。",
             ephemeral=True,
         )
 
