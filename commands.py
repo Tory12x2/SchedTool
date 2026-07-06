@@ -5,8 +5,12 @@ from discord import app_commands
 
 from config import MAX_DAYS
 from close_service import close_schedule
-from auto_scheduler import build_available_day_reminder_text, get_non_bot_member_ids
+from auto_scheduler import (
+    build_available_day_reminder_messages,
+    get_non_bot_member_ids,
+)
 from database import (
+    clear_participant_role_id,
     delete_event,
     get_auto_schedule_settings,
     get_dates,
@@ -29,6 +33,12 @@ from database import (
 )
 from embeds import create_result_embed
 from schedule_service import create_schedule
+from participants import (
+    build_large_group_warning,
+    get_participant_members,
+    get_participant_role,
+    is_participant_role_missing,
+)
 from views import SetupView, build_setup_status_text
 
 
@@ -128,7 +138,8 @@ def setup_commands(client):
             return
 
         await interaction.response.send_message(
-            f"日程調整を作成しました: {event_id}",
+            f"日程調整を作成しました: {event_id}"
+            f"{build_large_group_warning(interaction.guild)}",
             ephemeral=True,
         )
 
@@ -355,8 +366,25 @@ def setup_commands(client):
     ):
         save_participant_role_id(role.id, interaction.guild.id)
 
+        mention_note = ""
+        if not role.mentionable:
+            mention_note = "\n開催日通知で呼び出すには、ロールをメンション可能にしてください。"
+
         await interaction.response.send_message(
-            f"参加予定者ロールを {role.mention} に設定しました。",
+            f"参加予定者ロールを {role.mention} に設定しました。{mention_note}",
+            ephemeral=True,
+        )
+
+    @app_commands.checks.has_permissions(administrator=True)
+    @client.tree.command(
+        name="participant_role_clear",
+        description="参加予定者ロールを解除して全メンバーを対象に戻す",
+    )
+    async def participant_role_clear(interaction):
+        clear_participant_role_id(interaction.guild.id)
+        await interaction.response.send_message(
+            "参加予定者ロールを解除し、Bot以外の全メンバーを対象に戻しました。"
+            f"{build_large_group_warning(interaction.guild)}",
             ephemeral=True,
         )
 
@@ -478,7 +506,20 @@ def setup_commands(client):
             "available",
             interaction.guild.id,
         )
+        if is_participant_role_missing(interaction.guild):
+            await interaction.response.send_message(
+                "設定されている参加予定者ロールが見つかりません。再設定してください。",
+                ephemeral=True,
+            )
+            return
+
         member_ids = get_non_bot_member_ids(interaction.guild)
+        if not member_ids:
+            await interaction.response.send_message(
+                "通知対象のメンバーがいません。",
+                ephemeral=True,
+            )
+            return
         available_users &= member_ids
         unavailable_users = (
             get_users(event_id, target_value, "no", interaction.guild.id) & member_ids
@@ -511,17 +552,25 @@ def setup_commands(client):
             return
 
         reminder_settings = get_reminder_settings(interaction.guild.id)
-        await channel.send(
-            "[テスト送信]\n"
-            + build_available_day_reminder_text(
-                event_id,
-                target_date,
-                available_users,
-                maybe_users,
-                reminder_settings["comment"],
-                get_notification_mention_enabled(interaction.guild.id),
-            )
+        messages = build_available_day_reminder_messages(
+            event_id,
+            target_date,
+            available_users,
+            maybe_users,
+            reminder_settings["comment"],
+            get_notification_mention_enabled(interaction.guild.id),
+            get_participant_role_id(interaction.guild.id),
         )
+        for index, message in enumerate(messages):
+            prefix = "[テスト送信]\n" if index == 0 else "[テスト送信・続き]\n"
+            await channel.send(
+                prefix + message,
+                allowed_mentions=discord.AllowedMentions(
+                    everyone=False,
+                    users=True,
+                    roles=True,
+                ),
+            )
 
         await interaction.response.send_message(
             f"{channel.mention} にテスト通知を送信しました。",
@@ -583,19 +632,14 @@ def setup_commands(client):
     notification_channel_setting.error(admin_command_error)
     notification_mention_setting.error(admin_command_error)
     participant_role_setting.error(admin_command_error)
+    participant_role_clear.error(admin_command_error)
     admin_status.error(admin_command_error)
     delete.error(admin_command_error)
     close.error(admin_command_error)
 
 
 def get_participant_members_for_status(guild):
-    role_id = get_participant_role_id(guild.id)
-    if role_id:
-        role = guild.get_role(role_id)
-        if role:
-            return [member for member in role.members if not member.bot]
-
-    return [member for member in guild.members if not member.bot]
+    return get_participant_members(guild)
 
 
 def build_admin_status_lines(guild, events, participant_members, participant_ids, guild_id):
@@ -603,8 +647,7 @@ def build_admin_status_lines(guild, events, participant_members, participant_ids
     auto_settings = get_auto_schedule_settings(guild_id)
     reminder_settings = get_reminder_settings(guild_id)
     result_channel = guild.get_channel(get_result_channel_id(guild_id))
-    participant_role_id = get_participant_role_id(guild_id)
-    participant_role = guild.get_role(participant_role_id) if participant_role_id else None
+    participant_role = get_participant_role(guild)
 
     lines = [
         "管理者ステータス",
@@ -616,7 +659,11 @@ def build_admin_status_lines(guild, events, participant_members, participant_ids
         (
             f"- 参加予定者: {participant_role.mention}"
             if participant_role
-            else "- 参加予定者: Bot以外の全メンバー"
+            else (
+                "- 参加予定者: 設定ロールが見つかりません（再設定が必要です）"
+                if is_participant_role_missing(guild)
+                else "- 参加予定者: Bot以外の全メンバー"
+            )
         ),
         f"- 対象人数: {len(participant_members)}人",
         (
@@ -624,9 +671,14 @@ def build_admin_status_lines(guild, events, participant_members, participant_ids
             f" / メンション{'有効' if get_notification_mention_enabled(guild_id) else '無効'}"
         ),
         f"- 通知コメント: {reminder_settings['comment'] or 'なし'}",
-        "",
-        "未回答者",
     ]
+
+    warning = build_large_group_warning(guild).strip()
+    if warning:
+        lines.append("")
+        lines.append(warning)
+
+    lines.extend(["", "未回答者"])
 
     if not events:
         lines.append("- イベントがありません")

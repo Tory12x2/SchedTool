@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from config import WEEKDAYS
 from database import (
     get_result_channel_id,
+    initialize_event_participants,
     save_result_channel_id,
     save_event_dates,
     save_event_group_settings,
@@ -12,6 +13,7 @@ from database import (
     save_schedule_message,
 )
 from embeds import create_result_embed
+from participants import get_participant_member_ids, is_participant_role_missing
 from views import OpenScheduleView
 
 
@@ -64,6 +66,13 @@ def build_deadline_text():
 
 
 async def create_schedule(client, guild, schedule_channel, event_name, start_date, days):
+    if is_participant_role_missing(guild):
+        raise RuntimeError(
+            "設定されている参加予定者ロールが見つかりません。"
+            "/participant_role_setting で再設定するか、"
+            "/participant_role_clear で全メンバー対象に戻してください。"
+        )
+
     guild_id = guild.id
     event_id = f"{event_name}_{start_date.strftime('%Y%m%d')}"
     dates = build_dates(start_date, days)
@@ -76,6 +85,11 @@ async def create_schedule(client, guild, schedule_channel, event_name, start_dat
     final_deadline_at = max(deadlines)
 
     save_event_dates(event_id, dates, guild_id)
+    initialize_event_participants(
+        event_id,
+        get_participant_member_ids(guild),
+        guild_id,
+    )
     save_event_settings(
         event_id,
         final_deadline_at.strftime("%Y-%m-%d %H:%M"),

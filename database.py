@@ -233,6 +233,45 @@ def initialize_database():
         """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_participants (
+            event_id TEXT,
+            user_id INTEGER,
+            active INTEGER,
+            PRIMARY KEY (event_id, user_id)
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS event_participant_snapshots (
+            event_id TEXT PRIMARY KEY
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS participant_scan_logs (
+            guild_id INTEGER,
+            scan_date TEXT,
+            PRIMARY KEY (guild_id, scan_date)
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS missing_role_alerts (
+            guild_id INTEGER,
+            role_id INTEGER,
+            PRIMARY KEY (guild_id, role_id)
+        )
+        """
+    )
+
     migrate_legacy_data_to_default_guild()
     initialize_default_guild_settings()
 
@@ -247,6 +286,13 @@ def initialize_database():
         """
         CREATE INDEX IF NOT EXISTS idx_availability_event_date_user
         ON availability (event_id, date, user_id)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_event_participants_active
+        ON event_participants (event_id, active)
         """
     )
 
@@ -946,6 +992,33 @@ def save_participant_role_id(role_id, guild_id=GUILD_ID):
         """,
         (role_id, guild_id),
     )
+    cursor.execute(
+        """
+        DELETE FROM missing_role_alerts
+        WHERE guild_id = ?
+        """,
+        (guild_id,),
+    )
+    conn.commit()
+
+
+def clear_participant_role_id(guild_id=GUILD_ID):
+    ensure_guild_settings(guild_id)
+    cursor.execute(
+        """
+        UPDATE guild_settings
+        SET participant_role_id = NULL
+        WHERE guild_id = ?
+        """,
+        (guild_id,),
+    )
+    cursor.execute(
+        """
+        DELETE FROM missing_role_alerts
+        WHERE guild_id = ?
+        """,
+        (guild_id,),
+    )
     conn.commit()
 
 
@@ -1042,6 +1115,142 @@ def mark_reminder_sent(event_id, date, guild_id=GUILD_ID):
         VALUES (?, ?)
         """,
         (event_id, date),
+    )
+    conn.commit()
+
+
+def has_participant_scan_run(guild_id, scan_date):
+    cursor.execute(
+        """
+        SELECT 1
+        FROM participant_scan_logs
+        WHERE guild_id = ?
+        AND scan_date = ?
+        """,
+        (guild_id, scan_date),
+    )
+    return cursor.fetchone() is not None
+
+
+def mark_participant_scan_run(guild_id, scan_date):
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO participant_scan_logs
+        VALUES (?, ?)
+        """,
+        (guild_id, scan_date),
+    )
+    conn.commit()
+
+
+def initialize_event_participants(event_id, user_ids, guild_id=GUILD_ID):
+    event_id = to_storage_event_id(guild_id, event_id)
+    cursor.execute(
+        """
+        DELETE FROM event_participants
+        WHERE event_id = ?
+        """,
+        (event_id,),
+    )
+    cursor.executemany(
+        """
+        INSERT INTO event_participants (event_id, user_id, active)
+        VALUES (?, ?, 1)
+        """,
+        [(event_id, user_id) for user_id in user_ids],
+    )
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO event_participant_snapshots
+        VALUES (?)
+        """,
+        (event_id,),
+    )
+    conn.commit()
+
+
+def sync_event_participants(event_id, current_user_ids, guild_id=GUILD_ID):
+    event_id = to_storage_event_id(guild_id, event_id)
+    current_user_ids = set(current_user_ids)
+    cursor.execute(
+        """
+        SELECT 1
+        FROM event_participant_snapshots
+        WHERE event_id = ?
+        """,
+        (event_id,),
+    )
+    if not cursor.fetchone():
+        initialize_event_participants(event_id, current_user_ids, guild_id)
+        return set()
+
+    cursor.execute(
+        """
+        SELECT user_id, active
+        FROM event_participants
+        WHERE event_id = ?
+        """,
+        (event_id,),
+    )
+    rows = cursor.fetchall()
+
+    active_user_ids = {user_id for user_id, active in rows if active}
+    added_user_ids = current_user_ids - active_user_ids
+
+    cursor.execute(
+        """
+        UPDATE event_participants
+        SET active = 0
+        WHERE event_id = ?
+        """,
+        (event_id,),
+    )
+    cursor.executemany(
+        """
+        INSERT INTO event_participants (event_id, user_id, active)
+        VALUES (?, ?, 1)
+        ON CONFLICT(event_id, user_id) DO UPDATE SET active = 1
+        """,
+        [(event_id, user_id) for user_id in current_user_ids],
+    )
+    conn.commit()
+    return added_user_ids
+
+
+def mark_event_participants_inactive(event_id, user_ids, guild_id=GUILD_ID):
+    event_id = to_storage_event_id(guild_id, event_id)
+    cursor.executemany(
+        """
+        UPDATE event_participants
+        SET active = 0
+        WHERE event_id = ?
+        AND user_id = ?
+        """,
+        [(event_id, user_id) for user_id in user_ids],
+    )
+    conn.commit()
+
+
+def has_missing_role_alert(guild_id, role_id):
+    cursor.execute(
+        """
+        SELECT 1
+        FROM missing_role_alerts
+        WHERE guild_id = ?
+        AND role_id = ?
+        """,
+        (guild_id, role_id),
+    )
+    return cursor.fetchone() is not None
+
+
+def mark_missing_role_alert(guild_id, role_id):
+    cursor.execute(
+        """
+        INSERT OR IGNORE INTO missing_role_alerts
+        VALUES (?, ?)
+        """,
+        (guild_id, role_id),
     )
     conn.commit()
 
@@ -1158,6 +1367,8 @@ def delete_event(event_id, guild_id=GUILD_ID):
         "event_settings",
         "event_group_settings",
         "reminder_logs",
+        "event_participants",
+        "event_participant_snapshots",
     ):
         cursor.execute(
             f"""

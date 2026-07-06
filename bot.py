@@ -1,9 +1,9 @@
 import discord
 from discord import app_commands
 
-from auto_scheduler import auto_schedule_loop
+from auto_scheduler import auto_schedule_loop, send_missing_role_alert_once
 from commands import setup_commands
-from database import get_dates, get_schedule_messages
+from database import get_dates, get_participant_role_id, get_schedule_messages
 from views import OpenScheduleView
 
 
@@ -45,6 +45,14 @@ class ScheduleClient(discord.Client):
 
     async def on_guild_join(self, guild):
         await self.sync_commands_to_guild(guild)
+
+    async def on_guild_role_delete(self, role):
+        if get_participant_role_id(role.guild.id) != role.id:
+            return
+        try:
+            await send_missing_role_alert_once(self, role.guild, role.id)
+        except discord.DiscordException as error:
+            print(f"{role.guild.name}: ロール削除警告の送信に失敗しました / {error}")
 
     async def sync_commands_to_guilds(self):
         for guild in self.guilds:

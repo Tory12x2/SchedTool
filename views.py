@@ -14,10 +14,23 @@ from database import (
     get_result_message,
     get_users,
     save_result_channel_id,
+    save_participant_role_id,
     save_schedule_settings,
     set_user_status,
 )
-from embeds import create_monthly_table_embed, create_personal_embed, create_result_embed
+from embeds import (
+    create_monthly_table_embed,
+    create_personal_embed,
+    create_result_embed,
+    get_monthly_table_page_count,
+)
+from participants import (
+    build_large_group_warning,
+    can_member_answer,
+    get_participant_members,
+    get_participant_role,
+    is_participant_role_missing,
+)
 
 
 # =========================
@@ -41,14 +54,25 @@ def build_setup_status_text(guild):
         else "未設定"
     )
     channel_text = result_channel.mention if result_channel else "未設定"
+    role = get_participant_role(guild)
+    if is_participant_role_missing(guild):
+        role_text = "設定ロールが見つかりません（再設定が必要です）"
+    elif role:
+        role_text = role.mention
+    else:
+        role_text = "Bot以外の全メンバー"
 
     return (
         "SchedTool 初期設定\n\n"
         f"通知チャンネル: {channel_text}\n"
         f"イベント設定: {schedule_text}\n\n"
+        f"参加予定者: {role_text}\n"
+        f"対象人数: {len(get_participant_members(guild))}人\n\n"
         "1. 「通知チャンネルを設定」から、集計や通知を送るチャンネルを選びます。\n"
         "2. 「イベント名と日数を設定する」で、日程調整の基本設定を保存します。\n"
-        "3. 設定後、/schedule start:YYYY-MM-DD で日程調整を作成できます。"
+        "3. 必要に応じて「参加予定者ロールを設定」から対象者を選びます。\n"
+        "4. 設定後、/schedule start:YYYY-MM-DD で日程調整を作成できます。"
+        f"{build_large_group_warning(guild)}"
     )
 
 
@@ -117,6 +141,23 @@ class SetupView(discord.ui.View):
         save_result_channel_id(channel.id, interaction.guild.id)
         await interaction.response.send_message(
             f"通知チャンネルを {channel.mention} に設定しました。",
+            ephemeral=True,
+        )
+
+    @discord.ui.select(
+        cls=discord.ui.RoleSelect,
+        placeholder="参加予定者ロールを設定",
+        min_values=1,
+        max_values=1,
+    )
+    async def set_participant_role(self, interaction, select):
+        role = select.values[0]
+        save_participant_role_id(role.id, interaction.guild.id)
+        mention_note = ""
+        if not role.mentionable:
+            mention_note = "\n開催日通知で呼び出すには、ロールをメンション可能にしてください。"
+        await interaction.response.send_message(
+            f"参加予定者ロールを {role.mention} に設定しました。{mention_note}",
             ephemeral=True,
         )
 
@@ -203,6 +244,15 @@ class OpenScheduleButton(discord.ui.Button):
         self.dates = dates
 
     async def callback(self, interaction):
+        if not can_member_answer(interaction.guild, interaction.user):
+            message = (
+                "設定されている参加予定者ロールが見つかりません。管理者へ確認してください。"
+                if is_participant_role_missing(interaction.guild)
+                else "この日程調整は、参加予定者ロールのメンバーだけが回答できます。"
+            )
+            await interaction.response.send_message(message, ephemeral=True)
+            return
+
         if is_date_group_closed(self.event_id, self.group_index, self.guild_id):
             await interaction.response.send_message(
                 "この日程範囲は締切済みです。",
@@ -236,6 +286,43 @@ class OpenScheduleButton(discord.ui.Button):
         )
 
 
+class MonthlyTablePaginationView(discord.ui.View):
+    def __init__(self, guild, event_id, dates, page=0):
+        super().__init__(timeout=900)
+        self.guild = guild
+        self.event_id = event_id
+        self.dates = dates
+        self.page_count = get_monthly_table_page_count(guild)
+        self.page = max(0, min(page, self.page_count - 1))
+        self.previous_page.disabled = self.page == 0
+        self.next_page.disabled = self.page >= self.page_count - 1
+
+    async def show_page(self, interaction, page):
+        view = MonthlyTablePaginationView(
+            self.guild,
+            self.event_id,
+            self.dates,
+            page,
+        )
+        await interaction.response.edit_message(
+            embed=create_monthly_table_embed(
+                self.guild,
+                self.event_id,
+                self.dates,
+                page,
+            ),
+            view=view,
+        )
+
+    @discord.ui.button(label="前へ", style=discord.ButtonStyle.secondary)
+    async def previous_page(self, interaction, button):
+        await self.show_page(interaction, self.page - 1)
+
+    @discord.ui.button(label="次へ", style=discord.ButtonStyle.secondary)
+    async def next_page(self, interaction, button):
+        await self.show_page(interaction, self.page + 1)
+
+
 class MonthlyTableButton(discord.ui.Button):
     def __init__(self, event_id, guild_id, dates):
         super().__init__(
@@ -250,6 +337,11 @@ class MonthlyTableButton(discord.ui.Button):
     async def callback(self, interaction):
         await interaction.response.send_message(
             embed=create_monthly_table_embed(
+                interaction.guild,
+                self.event_id,
+                self.dates,
+            ),
+            view=MonthlyTablePaginationView(
                 interaction.guild,
                 self.event_id,
                 self.dates,
@@ -305,6 +397,15 @@ class ScheduleButton(discord.ui.Button):
         return discord.ButtonStyle.red
 
     async def callback(self, interaction):
+        if not can_member_answer(interaction.guild, interaction.user):
+            message = (
+                "設定されている参加予定者ロールが見つかりません。管理者へ確認してください。"
+                if is_participant_role_missing(interaction.guild)
+                else "この日程調整は、参加予定者ロールのメンバーだけが回答できます。"
+            )
+            await interaction.response.send_message(message, ephemeral=True)
+            return
+
         if is_date_group_closed(self.event_id, self.group_index, self.guild_id):
             await interaction.response.send_message(
                 "この日程範囲は締切済みです。",
