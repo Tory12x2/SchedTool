@@ -4,7 +4,24 @@ import time
 from contextlib import contextmanager
 from logging.handlers import TimedRotatingFileHandler
 
-from config import DATABASE_PATH, LOG_RETENTION_DAYS, SCHEDTOOL_LOG_DIR
+import config
+
+
+DATABASE_PATH = getattr(config, "DATABASE_PATH", "schedule.db")
+SCHEDTOOL_LOG_DIR = os.getenv(
+    "SCHEDTOOL_LOG_DIR",
+    getattr(
+        config,
+        "SCHEDTOOL_LOG_DIR",
+        "/data/logs" if DATABASE_PATH.startswith("/data/") else "logs",
+    ),
+)
+LOG_RETENTION_DAYS = int(
+    os.getenv(
+        "SCHEDTOOL_LOG_RETENTION_DAYS",
+        getattr(config, "LOG_RETENTION_DAYS", 30),
+    )
+)
 
 
 LOGGER_NAME = "schedtool"
