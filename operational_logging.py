@@ -59,7 +59,6 @@ def setup_logging():
     discord_logger = logging.getLogger("discord")
     discord_logger.setLevel(logging.INFO)
     discord_logger.addHandler(file_handler)
-    discord_logger.addHandler(stream_handler)
 
     return logger
 
