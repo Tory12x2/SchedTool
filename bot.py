@@ -4,6 +4,7 @@ from discord import app_commands
 from auto_scheduler import auto_schedule_loop, send_missing_role_alert_once
 from commands import setup_commands
 from database import get_dates, get_participant_role_id, get_schedule_messages
+from operational_logging import log_error, log_info, log_warning, timed_log
 from views import OpenScheduleView
 
 
@@ -35,15 +36,25 @@ class ScheduleClient(discord.Client):
         self.loop.create_task(auto_schedule_loop(self))
 
     async def on_ready(self):
-        print(f"ログイン成功: {self.user}")
+        log_info(
+            "bot.ready",
+            user=self.user,
+            guilds=len(self.guilds),
+            cached_members=sum(
+                1 for guild in self.guilds for member in guild.members if not member.bot
+            ),
+        )
         if self.schedule_messages_refreshed:
             return
 
         self.schedule_messages_refreshed = True
-        await self.sync_commands_to_guilds()
-        await self.refresh_schedule_message_views()
+        with timed_log("startup.sync_commands", guilds=len(self.guilds)):
+            await self.sync_commands_to_guilds()
+        with timed_log("startup.refresh_views"):
+            await self.refresh_schedule_message_views()
 
     async def on_guild_join(self, guild):
+        log_info("guild.joined", guild_id=guild.id, members=guild.member_count)
         await self.sync_commands_to_guild(guild)
 
     async def on_guild_role_delete(self, role):
@@ -52,7 +63,12 @@ class ScheduleClient(discord.Client):
         try:
             await send_missing_role_alert_once(self, role.guild, role.id)
         except discord.DiscordException as error:
-            print(f"{role.guild.name}: ロール削除警告の送信に失敗しました / {error}")
+            log_error(
+                "role_delete_alert.failed",
+                error,
+                guild_id=role.guild.id,
+                role_id=role.id,
+            )
 
     async def sync_commands_to_guilds(self):
         for guild in self.guilds:
@@ -63,9 +79,9 @@ class ScheduleClient(discord.Client):
             guild_object = discord.Object(id=guild.id)
             self.tree.copy_global_to(guild=guild_object)
             synced = await self.tree.sync(guild=guild_object)
-            print(f"{guild.name}: {len(synced)} 個のコマンドを同期しました")
+            log_info("commands.synced", guild_id=guild.id, command_count=len(synced))
         except discord.DiscordException as error:
-            print(f"{guild.name}: コマンド同期に失敗しました / {error}")
+            log_error("commands.sync_failed", error, guild_id=guild.id)
 
     async def refresh_schedule_message_views(self):
         refreshed_count = 0
@@ -89,12 +105,15 @@ class ScheduleClient(discord.Client):
                 )
                 refreshed_count += 1
             except discord.DiscordException as error:
-                print(
-                    "日程調整ボタンの再登録に失敗しました: "
-                    f"{schedule_message['event_id']} / {error}"
+                log_warning(
+                    "schedule_view.refresh_failed",
+                    event_id=schedule_message["event_id"],
+                    guild_id=schedule_message["guild_id"],
+                    error_type=error.__class__.__name__,
+                    error=str(error)[:300],
                 )
 
-        print(f"{refreshed_count} 件の日程調整ボタンを再登録しました")
+        log_info("schedule_views.refreshed", count=refreshed_count)
 
 
 def create_client():

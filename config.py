@@ -37,6 +37,11 @@ RESULT_CHANNEL_ID = get_int_env("RESULT_CHANNEL_ID")
 # SQLiteの保存先です。
 
 DATABASE_PATH = os.getenv("DATABASE_PATH", "schedule.db")
+SCHEDTOOL_LOG_DIR = os.getenv(
+    "SCHEDTOOL_LOG_DIR",
+    "/data/logs" if DATABASE_PATH.startswith("/data/") else "logs",
+)
+LOG_RETENTION_DAYS = get_int_env("SCHEDTOOL_LOG_RETENTION_DAYS", 30)
 
 
 # =========================

@@ -245,12 +245,29 @@ DISCORD_TOKEN=your_discord_bot_token_here
 RESULT_CHANNEL_ID=
 GUILD_ID=
 DATABASE_PATH=schedule.db
+SCHEDTOOL_LOG_DIR=logs
+SCHEDTOOL_LOG_RETENTION_DAYS=30
 ```
 
 - `DISCORD_TOKEN`: 必須。Discord Bot Tokenです
 - `RESULT_CHANNEL_ID`: 任意。初期通知先チャンネルIDです。通常は空のままにして、Discord上で設定します
 - `GUILD_ID`: 任意。古いローカルデータの移行用です。通常は空で構いません
 - `DATABASE_PATH`: 任意。SQLite DBの保存先です
+- `SCHEDTOOL_LOG_DIR`: 任意。運用ログの保存先です。Docker運用では未指定なら `/data/logs` に保存されます
+- `SCHEDTOOL_LOG_RETENTION_DAYS`: 任意。運用ログを何日分残すかを指定します。初期値は30日です
+
+## 運用ログ
+
+SchedToolは、負荷やエラー状況を確認できるように運用ログを保存します。
+
+記録する主な内容:
+
+- 起動、参加サーバー数、キャッシュ済みメンバー数
+- 日次のイベント数、回答数、DBサイズ
+- 自動作成、締切、開催日通知、追加メンバー通知の処理件数
+- コマンド設定変更、回答保存、権限エラー、Discord APIエラー
+
+Botトークン、環境変数、メッセージ本文、DM内容はログに出しません。ログ保存先はWeb公開ディレクトリに置かないでください。
 
 ## ファイルの役割
 
@@ -263,3 +280,4 @@ DATABASE_PATH=schedule.db
 - `schedule_service.py`: 日程調整の作成処理です
 - `close_service.py`: 締切処理です
 - `auto_scheduler.py`: 自動作成、締切、開催日通知の定期処理です
+- `operational_logging.py`: 運用ログの保存と日次ヘルスログを担当します

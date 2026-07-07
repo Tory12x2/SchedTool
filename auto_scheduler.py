@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -32,6 +33,13 @@ from participants import (
     get_participant_member_ids,
     is_participant_role_missing,
 )
+from operational_logging import (
+    elapsed_ms,
+    log_error,
+    log_info,
+    log_warning,
+    maybe_log_daily_health,
+)
 from schedule_service import create_schedule
 
 
@@ -50,21 +58,27 @@ async def auto_schedule_loop(client):
 
     while not client.is_closed():
         try:
+            loop_started = time.monotonic()
             await run_auto_schedule_once(client)
             await run_deadline_close_once(client)
             await run_participant_growth_once(client)
             await run_available_day_reminder_once(client)
+            maybe_log_daily_health(client, datetime.now(TIMEZONE).date())
+            log_info("auto_loop.completed", elapsed_ms=elapsed_ms(loop_started))
         except Exception as error:
-            print(f"自動日程調整エラー: {error}")
+            log_error("auto_loop.failed", error)
 
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)
 
 
 async def run_auto_schedule_once(client):
+    created_count = 0
+    skipped_count = 0
     for auto_settings in get_active_auto_schedule_settings():
         schedule_settings = get_schedule_settings(auto_settings["guild_id"])
 
         if not auto_settings or not auto_settings["active"] or not schedule_settings:
+            skipped_count += 1
             continue
 
         today = datetime.now(TIMEZONE).date()
@@ -75,11 +89,13 @@ async def run_auto_schedule_once(client):
         post_date = next_start_date - timedelta(days=auto_settings["lead_days"])
 
         if today < post_date:
+            skipped_count += 1
             continue
 
         guild = client.get_guild(auto_settings["guild_id"])
         channel = client.get_channel(auto_settings["channel_id"])
         if not guild or not channel:
+            skipped_count += 1
             continue
 
         try:
@@ -92,18 +108,28 @@ async def run_auto_schedule_once(client):
                 schedule_settings["days"],
             )
         except RuntimeError as error:
-            print(f"{guild.name}: 自動作成を保留しました / {error}")
+            skipped_count += 1
+            log_warning(
+                "auto_schedule.skipped",
+                guild_id=auto_settings["guild_id"],
+                error_type=error.__class__.__name__,
+                error=str(error)[:300],
+            )
             continue
 
+        created_count += 1
         following_start_date = next_start_date + timedelta(days=schedule_settings["days"])
         update_auto_schedule_next_start(
             following_start_date.strftime("%Y-%m-%d"),
             auto_settings["guild_id"],
         )
 
+    log_info("auto_schedule.checked", created=created_count, skipped=skipped_count)
+
 
 async def run_deadline_close_once(client):
     now = datetime.now(TIMEZONE)
+    closed_count = 0
 
     for event in get_open_event_groups_with_deadlines():
         guild = client.get_guild(event["guild_id"])
@@ -120,10 +146,15 @@ async def run_deadline_close_once(client):
                 event["event_id"],
                 event["group_index"],
             )
+            closed_count += 1
+
+    log_info("deadline_close.checked", closed=closed_count)
 
 
 async def run_available_day_reminder_once(client):
     now = datetime.now(TIMEZONE)
+    sent_count = 0
+    target_events = 0
 
     for guild in client.guilds:
         reminder_settings = get_reminder_settings(guild.id)
@@ -147,6 +178,7 @@ async def run_available_day_reminder_once(client):
             continue
 
         for event in get_unnotified_event_dates(target_value, guild.id):
+            target_events += 1
             available_users = get_users(
                 event["event_id"],
                 event["date"],
@@ -190,11 +222,21 @@ async def run_available_day_reminder_once(client):
                         ),
                     )
                 mark_reminder_sent(event["event_id"], event["date"], guild.id)
+                sent_count += 1
+
+    log_info(
+        "available_day_reminder.checked",
+        target_events=target_events,
+        sent=sent_count,
+    )
 
 
 async def run_participant_growth_once(client):
     now = datetime.now(TIMEZONE)
     scan_date = now.date().isoformat()
+    scanned_guilds = 0
+    target_events = 0
+    notified_users = 0
 
     for guild in client.guilds:
         reminder_settings = get_reminder_settings(guild.id)
@@ -206,6 +248,7 @@ async def run_participant_growth_once(client):
         if is_participant_role_missing(guild):
             await send_missing_role_alert_once(client, guild)
             mark_participant_scan_run(guild.id, scan_date)
+            scanned_guilds += 1
             continue
 
         current_user_ids = get_participant_member_ids(guild)
@@ -214,6 +257,7 @@ async def run_participant_growth_once(client):
             for event in get_open_events_with_deadlines()
             if event["guild_id"] == guild.id
         ]
+        target_events += len(guild_events)
 
         for event in guild_events:
             schedule_message = get_schedule_message(event["event_id"], guild.id)
@@ -233,6 +277,7 @@ async def run_participant_growth_once(client):
             if not added_user_ids:
                 continue
 
+            notified_users += len(added_user_ids)
             link = f"https://discord.com/channels/{guild.id}/{channel_id}/{message_id}"
             for user_ids in chunk_user_ids(added_user_ids):
                 mentions = " ".join(f"<@{user_id}>" for user_id in user_ids)
@@ -257,6 +302,15 @@ async def run_participant_growth_once(client):
                     raise
 
         mark_participant_scan_run(guild.id, scan_date)
+        scanned_guilds += 1
+
+    log_info(
+        "participant_growth.checked",
+        scan_date=scan_date,
+        guilds=scanned_guilds,
+        target_events=target_events,
+        notified_users=notified_users,
+    )
 
 
 async def send_missing_role_alert_once(client, guild, deleted_role_id=None):
@@ -275,6 +329,7 @@ async def send_missing_role_alert_once(client, guild, deleted_role_id=None):
         "再設定されるまで日程の自動作成と通知を停止します。"
     )
     mark_missing_role_alert(guild.id, role_id)
+    log_warning("participant_role.missing_alert_sent", guild_id=guild.id, role_id=role_id)
 
 
 def chunk_user_ids(user_ids, size=PARTICIPANT_PAGE_SIZE):

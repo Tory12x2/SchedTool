@@ -32,6 +32,7 @@ from database import (
     stop_auto_schedule,
 )
 from embeds import create_result_embed
+from operational_logging import log_error, log_info, log_warning
 from schedule_service import create_schedule
 from participants import (
     build_large_group_warning,
@@ -50,6 +51,18 @@ from views import SetupView, build_setup_status_text
 
 
 def setup_commands(client):
+    async def log_command_error(interaction, error):
+        command_name = interaction.command.name if interaction.command else "unknown"
+        log_error(
+            "command.failed",
+            error,
+            command=command_name,
+            guild_id=interaction.guild.id if interaction.guild else None,
+            channel_id=interaction.channel.id if interaction.channel else None,
+        )
+
+    client.tree.on_error = log_command_error
+
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="setup",
@@ -90,6 +103,11 @@ def setup_commands(client):
             f"イベント名: {event_name}\n"
             f"日数: {days}日",
             ephemeral=True,
+        )
+        log_info(
+            "command.schedule_setting.saved",
+            guild_id=interaction.guild.id,
+            days=days,
         )
 
     @app_commands.checks.has_permissions(administrator=True)
@@ -141,6 +159,13 @@ def setup_commands(client):
             f"日程調整を作成しました: {event_id}"
             f"{build_large_group_warning(interaction.guild)}",
             ephemeral=True,
+        )
+        log_info(
+            "command.schedule.created",
+            guild_id=interaction.guild.id,
+            channel_id=interaction.channel.id,
+            event_id=event_id,
+            days=days,
         )
 
     @app_commands.checks.has_permissions(administrator=True)
@@ -203,6 +228,12 @@ def setup_commands(client):
             f"投稿先: このチャンネル",
             ephemeral=True,
         )
+        log_info(
+            "command.auto_schedule.started",
+            guild_id=interaction.guild.id,
+            channel_id=interaction.channel.id,
+            lead_days=lead_days,
+        )
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -237,6 +268,7 @@ def setup_commands(client):
             f"{event_name} の自動作成を停止しました。",
             ephemeral=True,
         )
+        log_info("command.auto_schedule.stopped", guild_id=interaction.guild.id)
 
     @client.tree.command(
         name="my_icon",
@@ -273,6 +305,11 @@ def setup_commands(client):
         await interaction.response.send_message(
             f"あなたのアイコンを {icon} に設定しました。",
             ephemeral=True,
+        )
+        log_info(
+            "command.my_icon.saved",
+            guild_id=interaction.guild.id,
+            user_id=interaction.user.id,
         )
 
     @app_commands.checks.has_permissions(administrator=True)
@@ -313,6 +350,12 @@ def setup_commands(client):
             f"コメント: {comment.strip() or 'なし'}",
             ephemeral=True,
         )
+        log_info(
+            "command.reminder_setting.saved",
+            guild_id=interaction.guild.id,
+            days_before=days_before,
+            hour=hour,
+        )
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -332,6 +375,11 @@ def setup_commands(client):
             f"通知チャンネルを {channel.mention} に設定しました。",
             ephemeral=True,
         )
+        log_info(
+            "command.notification_channel.saved",
+            guild_id=interaction.guild.id,
+            channel_id=channel.id,
+        )
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -350,6 +398,11 @@ def setup_commands(client):
         await interaction.response.send_message(
             f"通知メンションを{'有効' if enabled else '無効'}にしました。",
             ephemeral=True,
+        )
+        log_info(
+            "command.notification_mention.saved",
+            guild_id=interaction.guild.id,
+            enabled=enabled,
         )
 
     @app_commands.checks.has_permissions(administrator=True)
@@ -374,6 +427,12 @@ def setup_commands(client):
             f"参加予定者ロールを {role.mention} に設定しました。{mention_note}",
             ephemeral=True,
         )
+        log_info(
+            "command.participant_role.saved",
+            guild_id=interaction.guild.id,
+            role_id=role.id,
+            mentionable=role.mentionable,
+        )
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -387,6 +446,7 @@ def setup_commands(client):
             f"{build_large_group_warning(interaction.guild)}",
             ephemeral=True,
         )
+        log_info("command.participant_role.cleared", guild_id=interaction.guild.id)
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -460,6 +520,12 @@ def setup_commands(client):
 
         await channel.send(embed=create_result_embed(interaction.guild, event_id, dates))
         await interaction.response.send_message("通知しました", ephemeral=True)
+        log_info(
+            "command.announce.sent",
+            guild_id=interaction.guild.id,
+            channel_id=channel.id,
+            event_id=event_id,
+        )
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -576,6 +642,13 @@ def setup_commands(client):
             f"{channel.mention} にテスト通知を送信しました。",
             ephemeral=True,
         )
+        log_info(
+            "command.available_day_reminder_test.sent",
+            guild_id=interaction.guild.id,
+            channel_id=channel.id,
+            event_id=event_id,
+            messages=len(messages),
+        )
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -594,6 +667,11 @@ def setup_commands(client):
 
         delete_event(event_id, interaction.guild.id)
         await interaction.response.send_message(f"イベント {event_id} を削除しました")
+        log_warning(
+            "command.event.deleted",
+            guild_id=interaction.guild.id,
+            event_id=event_id,
+        )
 
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
@@ -611,9 +689,20 @@ def setup_commands(client):
             return
 
         await interaction.response.send_message(f"{event_id} を終了しました")
+        log_info(
+            "command.event.closed",
+            guild_id=interaction.guild.id,
+            event_id=event_id,
+        )
 
     async def admin_command_error(interaction, error):
         if isinstance(error, app_commands.errors.MissingPermissions):
+            log_warning(
+                "command.permission_denied",
+                command=interaction.command.name if interaction.command else "unknown",
+                guild_id=interaction.guild.id if interaction.guild else None,
+                user_id=interaction.user.id if interaction.user else None,
+            )
             await interaction.response.send_message(
                 "このコマンドは管理者のみ使用できます",
                 ephemeral=True,

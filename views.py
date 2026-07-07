@@ -24,6 +24,7 @@ from embeds import (
     create_result_embed,
     get_monthly_table_page_count,
 )
+from operational_logging import log_info, log_warning
 from participants import (
     build_large_group_warning,
     can_member_answer,
@@ -251,6 +252,13 @@ class OpenScheduleButton(discord.ui.Button):
                 else "この日程調整は、参加予定者ロールのメンバーだけが回答できます。"
             )
             await interaction.response.send_message(message, ephemeral=True)
+            log_warning(
+                "schedule.answer.denied",
+                guild_id=interaction.guild.id,
+                event_id=self.event_id,
+                user_id=interaction.user.id,
+                reason="role",
+            )
             return
 
         if is_date_group_closed(self.event_id, self.group_index, self.guild_id):
@@ -421,6 +429,14 @@ class ScheduleButton(discord.ui.Button):
             interaction.user.id,
             self.status,
             self.guild_id,
+        )
+        log_info(
+            "schedule.answer.saved",
+            guild_id=self.guild_id,
+            event_id=self.event_id,
+            date=self.date["value"],
+            user_id=interaction.user.id,
+            status=self.status,
         )
 
         all_dates = get_dates(self.event_id, self.guild_id)

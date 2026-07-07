@@ -1,5 +1,6 @@
 from bot import create_client
 from config import DISCORD_TOKEN
+from operational_logging import log_info, setup_logging
 
 
 # =========================
@@ -16,4 +17,6 @@ if not DISCORD_TOKEN:
 
 
 client = create_client()
+setup_logging()
+log_info("bot.starting")
 client.run(DISCORD_TOKEN)
