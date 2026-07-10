@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 from config import WEEKDAYS
 from database import (
+    get_deadline_settings,
     get_result_channel_id,
     initialize_event_participants,
     save_result_channel_id,
@@ -48,7 +49,7 @@ def split_dates(dates, size=DATE_GROUP_SIZE):
     return [dates[index : index + size] for index in range(0, len(dates), size)]
 
 
-def build_deadline_at(first_date_value):
+def build_deadline_at(first_date_value, days_before=2, hour=24):
     first_date = datetime.strptime(first_date_value, "%Y%m%d")
     today = datetime.now(TIMEZONE).date()
 
@@ -58,11 +59,17 @@ def build_deadline_at(first_date_value):
             second=0,
         )
 
-    return first_date - timedelta(days=1)
+    if hour == 24:
+        deadline_date = first_date.date() - timedelta(days=max(days_before - 1, 0))
+        return datetime.combine(deadline_date, datetime.min.time())
+
+    deadline_date = first_date.date() - timedelta(days=days_before)
+    return datetime.combine(deadline_date, datetime.min.time()).replace(hour=hour)
 
 
-def build_deadline_text():
-    return "各日程の2日前24時（開始日が当日の場合は当日23:59）"
+def build_deadline_text(days_before=2, hour=24):
+    hour_text = "24時" if hour == 24 else f"{hour}時"
+    return f"各日程の{days_before}日前{hour_text}（開始日が当日の場合は当日23:59）"
 
 
 async def create_schedule(client, guild, schedule_channel, event_name, start_date, days):
@@ -77,8 +84,13 @@ async def create_schedule(client, guild, schedule_channel, event_name, start_dat
     event_id = f"{event_name}_{start_date.strftime('%Y%m%d')}"
     dates = build_dates(start_date, days)
     date_groups = split_dates(dates)
+    deadline_settings = get_deadline_settings(guild_id)
     deadlines = [
-        build_deadline_at(date_group[0]["value"])
+        build_deadline_at(
+            date_group[0]["value"],
+            deadline_settings["days_before"],
+            deadline_settings["hour"],
+        )
         for date_group in date_groups
         if date_group
     ]
@@ -124,7 +136,7 @@ async def create_schedule(client, guild, schedule_channel, event_name, start_dat
 
     schedule_message = await schedule_channel.send(
         f"日程調整: {event_id}\n"
-        f"締切: {build_deadline_text()}\n"
+        f"締切: {build_deadline_text(deadline_settings['days_before'], deadline_settings['hour'])}\n"
         "参加可否を回答するには、対象の日程ボタンを押してください。",
         view=OpenScheduleView(event_id, guild_id, dates),
     )

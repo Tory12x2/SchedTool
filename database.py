@@ -171,10 +171,29 @@ def initialize_database():
             auto_lead_days INTEGER,
             reminder_days_before INTEGER,
             reminder_hour INTEGER,
-            reminder_comment TEXT
+            reminder_comment TEXT,
+            deadline_days_before INTEGER DEFAULT 2,
+            deadline_hour INTEGER DEFAULT 24
         )
         """
     )
+
+    cursor.execute("PRAGMA table_info(guild_settings)")
+    guild_setting_columns = {row[1] for row in cursor.fetchall()}
+    if "deadline_days_before" not in guild_setting_columns:
+        cursor.execute(
+            """
+            ALTER TABLE guild_settings
+            ADD COLUMN deadline_days_before INTEGER DEFAULT 2
+            """
+        )
+    if "deadline_hour" not in guild_setting_columns:
+        cursor.execute(
+            """
+            ALTER TABLE guild_settings
+            ADD COLUMN deadline_hour INTEGER DEFAULT 24
+            """
+        )
 
     cursor.execute("PRAGMA table_info(bot_settings)")
     bot_setting_columns = {row[1] for row in cursor.fetchall()}
@@ -397,8 +416,24 @@ def initialize_default_guild_settings():
 
     cursor.execute(
         """
-        INSERT OR IGNORE INTO guild_settings
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO guild_settings (
+            guild_id,
+            result_channel_id,
+            mention_enabled,
+            participant_role_id,
+            event_name,
+            days,
+            auto_active,
+            auto_channel_id,
+            auto_next_start_date,
+            auto_lead_days,
+            reminder_days_before,
+            reminder_hour,
+            reminder_comment,
+            deadline_days_before,
+            deadline_hour
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 24)
         """,
         (
             GUILD_ID,
@@ -421,8 +456,24 @@ def initialize_default_guild_settings():
 def ensure_guild_settings(guild_id):
     cursor.execute(
         """
-        INSERT OR IGNORE INTO guild_settings
-        VALUES (?, ?, 1, NULL, NULL, NULL, 0, NULL, NULL, NULL, 1, 21, '')
+        INSERT OR IGNORE INTO guild_settings (
+            guild_id,
+            result_channel_id,
+            mention_enabled,
+            participant_role_id,
+            event_name,
+            days,
+            auto_active,
+            auto_channel_id,
+            auto_next_start_date,
+            auto_lead_days,
+            reminder_days_before,
+            reminder_hour,
+            reminder_comment,
+            deadline_days_before,
+            deadline_hour
+        )
+        VALUES (?, ?, 1, NULL, NULL, NULL, 0, NULL, NULL, NULL, 1, 21, '', 2, 24)
         """,
         (guild_id, None),
     )
@@ -493,19 +544,6 @@ def refresh_open_event_group_deadlines():
             (event_id,),
         )
         dates = [row[0] for row in cursor.fetchall()]
-
-        for group_index, start in enumerate(range(0, len(dates), DATE_GROUP_SIZE)):
-            deadline_at = build_group_deadline(dates[start])
-            cursor.execute(
-                """
-                UPDATE event_group_settings
-                SET deadline_at = ?
-                WHERE event_id = ?
-                AND group_index = ?
-                AND closed = 0
-                """,
-                (deadline_at, event_id, group_index),
-            )
 
         cursor.execute(
             """
@@ -940,6 +978,20 @@ def save_reminder_settings(days_before, hour, comment, guild_id=GUILD_ID):
     conn.commit()
 
 
+def save_deadline_settings(days_before, hour, guild_id=GUILD_ID):
+    ensure_guild_settings(guild_id)
+    cursor.execute(
+        """
+        UPDATE guild_settings
+        SET deadline_days_before = ?,
+            deadline_hour = ?
+        WHERE guild_id = ?
+        """,
+        (days_before, hour, guild_id),
+    )
+    conn.commit()
+
+
 def save_result_channel_id(channel_id, guild_id=GUILD_ID):
     ensure_guild_settings(guild_id)
     cursor.execute(
@@ -1076,6 +1128,29 @@ def get_reminder_settings(guild_id=GUILD_ID):
         "days_before": row[0],
         "hour": row[1],
         "comment": row[2] or "",
+    }
+
+
+def get_deadline_settings(guild_id=GUILD_ID):
+    ensure_guild_settings(guild_id)
+    cursor.execute(
+        """
+        SELECT deadline_days_before, deadline_hour
+        FROM guild_settings
+        WHERE guild_id = ?
+        """,
+        (guild_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return {
+            "days_before": 2,
+            "hour": 24,
+        }
+
+    return {
+        "days_before": row[0] if row[0] is not None else 2,
+        "hour": row[1] if row[1] is not None else 24,
     }
 
 

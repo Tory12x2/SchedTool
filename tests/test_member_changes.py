@@ -14,11 +14,13 @@ from database import (
     initialize_event_participants,
     save_event_dates,
     save_event_settings,
+    save_deadline_settings,
     save_participant_role_id,
     save_reminder_settings,
     save_schedule_message,
     set_user_status,
     sync_event_participants,
+    get_deadline_settings,
 )
 from embeds import (
     add_chunked_field,
@@ -26,6 +28,7 @@ from embeds import (
     get_monthly_table_page_count,
 )
 from participants import can_member_answer, get_participant_members
+from schedule_service import build_deadline_at, build_deadline_text
 
 
 class FakePermissions:
@@ -195,6 +198,23 @@ class MemberChangeTests(unittest.TestCase):
         self.assertNotIn(f"<@{initial_member.id}>", channel.messages[0])
 
         delete_event(event_id, guild_id)
+
+    def test_deadline_settings_are_saved_per_guild(self):
+        guild_id = 91005
+
+        save_deadline_settings(3, 22, guild_id)
+
+        self.assertEqual(
+            get_deadline_settings(guild_id),
+            {"days_before": 3, "hour": 22},
+        )
+        self.assertEqual(build_deadline_text(3, 22), "各日程の3日前22時（開始日が当日の場合は当日23:59）")
+
+    def test_current_deadline_default_stays_compatible(self):
+        deadline = build_deadline_at("20300110", 2, 24)
+
+        self.assertEqual(deadline.strftime("%Y-%m-%d %H:%M"), "2030-01-09 00:00")
+        self.assertEqual(build_deadline_text(2, 24), "各日程の2日前24時（開始日が当日の場合は当日23:59）")
 
 
 if __name__ == "__main__":

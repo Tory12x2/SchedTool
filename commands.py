@@ -14,6 +14,7 @@ from database import (
     delete_event,
     get_auto_schedule_settings,
     get_dates,
+    get_deadline_settings,
     get_event_list,
     get_latest_event_period,
     get_notification_mention_enabled,
@@ -23,6 +24,7 @@ from database import (
     get_schedule_settings,
     get_users,
     save_auto_schedule_settings,
+    save_deadline_settings,
     save_notification_mention_enabled,
     save_participant_role_id,
     save_reminder_settings,
@@ -352,6 +354,50 @@ def setup_commands(client):
         )
         log_info(
             "command.reminder_setting.saved",
+            guild_id=interaction.guild.id,
+            days_before=days_before,
+            hour=hour,
+        )
+
+    @app_commands.checks.has_permissions(administrator=True)
+    @client.tree.command(
+        name="deadline_setting",
+        description="日程調整の回答締切デフォルトを設定",
+    )
+    @app_commands.describe(
+        days_before="各日程の何日前を締切日にするか。現状維持は2",
+        hour="締切時刻。0〜24で指定。現状維持は24",
+    )
+    async def deadline_setting(
+        interaction,
+        days_before: int = 2,
+        hour: int = 24,
+    ):
+        if days_before < 0 or days_before > 30:
+            await interaction.response.send_message(
+                "締切日は0〜30日前の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        if hour < 0 or hour > 24:
+            await interaction.response.send_message(
+                "締切時刻は0〜24時の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        save_deadline_settings(days_before, hour, interaction.guild.id)
+
+        hour_text = "24時" if hour == 24 else f"{hour}時"
+        await interaction.response.send_message(
+            f"回答締切のデフォルトを保存しました。\n"
+            f"締切: 各日程の{days_before}日前{hour_text}\n\n"
+            "この設定は、今後作成する日程調整に反映されます。",
+            ephemeral=True,
+        )
+        log_info(
+            "command.deadline_setting.saved",
             guild_id=interaction.guild.id,
             days_before=days_before,
             hour=hour,
@@ -718,6 +764,7 @@ def setup_commands(client):
     auto_schedule_start.error(admin_command_error)
     auto_schedule_stop.error(admin_command_error)
     reminder_setting.error(admin_command_error)
+    deadline_setting.error(admin_command_error)
     notification_channel_setting.error(admin_command_error)
     notification_mention_setting.error(admin_command_error)
     participant_role_setting.error(admin_command_error)
@@ -735,6 +782,7 @@ def build_admin_status_lines(guild, events, participant_members, participant_ids
     schedule_settings = get_schedule_settings(guild_id)
     auto_settings = get_auto_schedule_settings(guild_id)
     reminder_settings = get_reminder_settings(guild_id)
+    deadline_settings = get_deadline_settings(guild_id)
     result_channel = guild.get_channel(get_result_channel_id(guild_id))
     participant_role = get_participant_role(guild)
 
@@ -760,6 +808,7 @@ def build_admin_status_lines(guild, events, participant_members, participant_ids
             f" / メンション{'有効' if get_notification_mention_enabled(guild_id) else '無効'}"
         ),
         f"- 通知コメント: {reminder_settings['comment'] or 'なし'}",
+        f"- 回答締切: {format_deadline_settings(deadline_settings)}",
     ]
 
     warning = build_large_group_warning(guild).strip()
@@ -800,6 +849,11 @@ def format_schedule_settings(settings):
     if not settings:
         return "未設定"
     return f"{settings['event_name']} / {settings['days']}日"
+
+
+def format_deadline_settings(settings):
+    hour_text = "24時" if settings["hour"] == 24 else f"{settings['hour']}時"
+    return f"各日程の{settings['days_before']}日前{hour_text}"
 
 
 def format_auto_settings(guild, settings):
