@@ -6,16 +6,23 @@ from zoneinfo import ZoneInfo
 
 from config import MAX_DAYS, STATUS_LABELS, STATUS_ORDER
 from database import (
+    clear_participant_role_id,
     get_dates,
+    get_auto_schedule_settings,
     get_deadline_settings,
     get_event_group_settings,
     get_event_settings,
+    get_notification_mention_enabled,
+    get_reminder_settings,
     get_result_channel_id,
     get_schedule_settings,
     get_result_message,
     get_users,
+    save_deadline_settings,
+    save_notification_mention_enabled,
     save_result_channel_id,
     save_participant_role_id,
+    save_reminder_settings,
     save_schedule_settings,
     set_user_status,
 )
@@ -45,10 +52,13 @@ from participants import (
 TIMEZONE = ZoneInfo("Asia/Tokyo")
 
 
-def build_setup_status_text(guild):
+def create_setup_embed(guild):
     schedule_settings = get_schedule_settings(guild.id)
     result_channel_id = get_result_channel_id(guild.id)
     result_channel = guild.get_channel(result_channel_id) if result_channel_id else None
+    reminder_settings = get_reminder_settings(guild.id)
+    deadline_settings = get_deadline_settings(guild.id)
+    auto_settings = get_auto_schedule_settings(guild.id)
 
     schedule_text = (
         f"{schedule_settings['event_name']} / {schedule_settings['days']}日"
@@ -57,27 +67,83 @@ def build_setup_status_text(guild):
     )
     channel_text = result_channel.mention if result_channel else "未設定"
     role = get_participant_role(guild)
-    deadline_settings = get_deadline_settings(guild.id)
     if is_participant_role_missing(guild):
-        role_text = "設定ロールが見つかりません（再設定が必要です）"
+        role_text = "設定ロールが見つかりません"
+        role_target_text = "再設定または解除してください"
     elif role:
         role_text = role.mention
+        role_target_text = f"{role.mention} のメンバー"
     else:
-        role_text = "Bot以外の全メンバー"
+        role_text = "なし"
+        role_target_text = "Bot以外の全メンバー"
 
+    embed = discord.Embed(
+        title="SchedTool 設定",
+        description="設定を変更すると、この画面で現在値を確認できます。",
+        color=discord.Color.blue(),
+    )
+    embed.add_field(name="通知チャンネル", value=channel_text, inline=False)
+    embed.add_field(name="イベント名・日数", value=schedule_text, inline=False)
+    embed.add_field(
+        name="回答締切",
+        value=f"各日程の{deadline_settings['days_before']}日前{deadline_settings['hour']}時",
+        inline=False,
+    )
+    embed.add_field(
+        name="開催日通知",
+        value=(
+            f"{reminder_settings['days_before']}日前の{reminder_settings['hour']}時\n"
+            f"コメント: {reminder_settings['comment'] or 'なし'}"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="メンション設定",
+        value="有効" if get_notification_mention_enabled(guild.id) else "無効",
+        inline=False,
+    )
+    embed.add_field(
+        name="自動作成",
+        value=format_setup_auto_settings(guild, auto_settings),
+        inline=False,
+    )
+    embed.add_field(
+        name="参加予定者ロール（任意）",
+        value=(
+            f"現在: {role_text}\n"
+            f"対象: {role_target_text}\n"
+            f"対象人数: {len(get_participant_members(guild))}人"
+        ),
+        inline=False,
+    )
+
+    warning = build_large_group_warning(guild).strip()
+    if warning:
+        embed.add_field(name="注意", value=warning, inline=False)
+
+    embed.set_footer(text="設定後、/schedule start:YYYY-MM-DD で日程調整を作成できます")
+    return embed
+
+
+def build_setup_status_text(guild):
+    embed = create_setup_embed(guild)
+    lines = [embed.title or "SchedTool 設定", embed.description or ""]
+    for field in embed.fields:
+        lines.append(f"{field.name}: {field.value}")
+    return "\n\n".join(lines)
+
+
+def format_setup_auto_settings(guild, settings):
+    if not settings or not settings["active"]:
+        return "停止中"
+
+    channel = guild.get_channel(settings["channel_id"])
+    channel_text = channel.mention if channel else "設定チャンネルが見つかりません"
     return (
-        "SchedTool 初期設定\n\n"
-        f"通知チャンネル: {channel_text}\n"
-        f"イベント設定: {schedule_text}\n\n"
-        f"参加予定者: {role_text}\n"
-        f"対象人数: {len(get_participant_members(guild))}人\n"
-        f"回答締切: 各日程の{deadline_settings['days_before']}日前{deadline_settings['hour']}時\n\n"
-        "1. 「通知チャンネルを設定」から、集計や通知を送るチャンネルを選びます。\n"
-        "2. 「イベント名と日数を設定する」で、日程調整の基本設定を保存します。\n"
-        "3. 必要に応じて「参加予定者ロールを設定」から対象者を選びます。\n"
-        "4. 締切を変える場合は /deadline_setting を実行します。\n"
-        "5. 設定後、/schedule start:YYYY-MM-DD で日程調整を作成できます。"
-        f"{build_large_group_warning(guild)}"
+        "動作中\n"
+        f"次回開始日: {settings['next_start_date']}\n"
+        f"投稿タイミング: 開始日の{settings['lead_days']}日前\n"
+        f"投稿先: {channel_text}"
     )
 
 
@@ -92,6 +158,13 @@ class SetupSettingsModal(discord.ui.Modal, title="イベント名と日数を設
         placeholder="例: 10",
         max_length=2,
     )
+
+    def __init__(self, guild_id):
+        super().__init__()
+        settings = get_schedule_settings(guild_id)
+        if settings:
+            self.event_name.default = settings["event_name"]
+            self.days.default = str(settings["days"])
 
     async def on_submit(self, interaction):
         event_name = str(self.event_name.value).strip()
@@ -122,10 +195,128 @@ class SetupSettingsModal(discord.ui.Modal, title="イベント名と日数を設
 
         save_schedule_settings(event_name, days, interaction.guild.id)
         await interaction.response.send_message(
-            f"イベント設定を保存しました。\n"
-            f"イベント名: {event_name}\n"
-            f"日数: {days}日\n\n"
-            "次に /schedule start:YYYY-MM-DD で日程調整を作成できます。",
+            "イベント設定を保存しました。",
+            embed=create_setup_embed(interaction.guild),
+            view=SetupView(),
+            ephemeral=True,
+        )
+
+
+class SetupDeadlineModal(discord.ui.Modal, title="回答締切を設定"):
+    days_before = discord.ui.TextInput(
+        label="何日前に締め切るか",
+        placeholder="例: 1",
+        default="1",
+        max_length=2,
+    )
+    hour = discord.ui.TextInput(
+        label="締切時刻（0〜23）",
+        placeholder="例: 0",
+        default="0",
+        max_length=2,
+    )
+
+    def __init__(self, guild_id):
+        super().__init__()
+        settings = get_deadline_settings(guild_id)
+        self.days_before.default = str(settings["days_before"])
+        self.hour.default = str(settings["hour"])
+
+    async def on_submit(self, interaction):
+        try:
+            days_before = int(str(self.days_before.value).strip())
+            hour = int(str(self.hour.value).strip())
+        except ValueError:
+            await interaction.response.send_message(
+                "締切日は数字で入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        if days_before < 0 or days_before > 30:
+            await interaction.response.send_message(
+                "締切日は0〜30日前の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        if hour < 0 or hour > 23:
+            await interaction.response.send_message(
+                "締切時刻は0〜23時の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        save_deadline_settings(days_before, hour, interaction.guild.id)
+        await interaction.response.send_message(
+            "回答締切を保存しました。",
+            embed=create_setup_embed(interaction.guild),
+            view=SetupView(),
+            ephemeral=True,
+        )
+
+
+class SetupReminderModal(discord.ui.Modal, title="開催日通知を設定"):
+    days_before = discord.ui.TextInput(
+        label="何日前に通知するか",
+        placeholder="例: 1",
+        default="1",
+        max_length=2,
+    )
+    hour = discord.ui.TextInput(
+        label="通知時刻（0〜23）",
+        placeholder="例: 21",
+        default="21",
+        max_length=2,
+    )
+    comment = discord.ui.TextInput(
+        label="通知に添えるコメント",
+        required=False,
+        max_length=500,
+    )
+
+    def __init__(self, guild_id):
+        super().__init__()
+        settings = get_reminder_settings(guild_id)
+        self.days_before.default = str(settings["days_before"])
+        self.hour.default = str(settings["hour"])
+        self.comment.default = settings["comment"]
+
+    async def on_submit(self, interaction):
+        try:
+            days_before = int(str(self.days_before.value).strip())
+            hour = int(str(self.hour.value).strip())
+        except ValueError:
+            await interaction.response.send_message(
+                "通知日は数字で入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        if days_before < 0:
+            await interaction.response.send_message(
+                "何日前に通知するかは0以上で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        if hour < 0 or hour > 23:
+            await interaction.response.send_message(
+                "通知時刻は0〜23時の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        save_reminder_settings(
+            days_before,
+            hour,
+            str(self.comment.value).strip(),
+            interaction.guild.id,
+        )
+        await interaction.response.send_message(
+            "開催日通知を保存しました。",
+            embed=create_setup_embed(interaction.guild),
+            view=SetupView(),
             ephemeral=True,
         )
 
@@ -140,47 +331,78 @@ class SetupView(discord.ui.View):
         channel_types=[discord.ChannelType.text],
         min_values=1,
         max_values=1,
+        row=0,
     )
     async def set_notification_channel(self, interaction, select):
         channel = select.values[0]
         save_result_channel_id(channel.id, interaction.guild.id)
-        await interaction.response.send_message(
-            f"通知チャンネルを {channel.mention} に設定しました。",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            embed=create_setup_embed(interaction.guild),
+            view=SetupView(),
+        )
+
+    @discord.ui.button(
+        label="イベント名と日数を設定",
+        style=discord.ButtonStyle.secondary,
+        row=1,
+    )
+    async def open_schedule_settings(self, interaction, button):
+        await interaction.response.send_modal(SetupSettingsModal(interaction.guild.id))
+
+    @discord.ui.button(
+        label="回答締切を設定",
+        style=discord.ButtonStyle.secondary,
+        row=1,
+    )
+    async def open_deadline_settings(self, interaction, button):
+        await interaction.response.send_modal(SetupDeadlineModal(interaction.guild.id))
+
+    @discord.ui.button(
+        label="開催日通知を設定",
+        style=discord.ButtonStyle.secondary,
+        row=2,
+    )
+    async def open_reminder_settings(self, interaction, button):
+        await interaction.response.send_modal(SetupReminderModal(interaction.guild.id))
+
+    @discord.ui.button(
+        label="メンション設定を切り替え",
+        style=discord.ButtonStyle.secondary,
+        row=2,
+    )
+    async def toggle_notification_mention(self, interaction, button):
+        enabled = not get_notification_mention_enabled(interaction.guild.id)
+        save_notification_mention_enabled(enabled, interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=create_setup_embed(interaction.guild),
+            view=SetupView(),
         )
 
     @discord.ui.select(
         cls=discord.ui.RoleSelect,
-        placeholder="参加予定者ロールを設定",
+        placeholder="参加予定者ロールを選択（任意）",
         min_values=1,
         max_values=1,
+        row=3,
     )
     async def set_participant_role(self, interaction, select):
         role = select.values[0]
         save_participant_role_id(role.id, interaction.guild.id)
-        mention_note = ""
-        if not role.mentionable:
-            mention_note = "\n開催日通知で呼び出すには、ロールをメンション可能にしてください。"
-        await interaction.response.send_message(
-            f"参加予定者ロールを {role.mention} に設定しました。{mention_note}",
-            ephemeral=True,
+        await interaction.response.edit_message(
+            embed=create_setup_embed(interaction.guild),
+            view=SetupView(),
         )
 
     @discord.ui.button(
-        label="イベント名と日数を設定する",
+        label="参加予定者ロールを解除",
         style=discord.ButtonStyle.secondary,
+        row=4,
     )
-    async def open_schedule_settings(self, interaction, button):
-        await interaction.response.send_modal(SetupSettingsModal())
-
-    @discord.ui.button(
-        label="現在の設定を確認する",
-        style=discord.ButtonStyle.secondary,
-    )
-    async def show_current_settings(self, interaction, button):
-        await interaction.response.send_message(
-            build_setup_status_text(interaction.guild),
-            ephemeral=True,
+    async def clear_participant_role(self, interaction, button):
+        clear_participant_role_id(interaction.guild.id)
+        await interaction.response.edit_message(
+            embed=create_setup_embed(interaction.guild),
+            view=SetupView(),
         )
 
 

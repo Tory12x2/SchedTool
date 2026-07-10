@@ -186,13 +186,12 @@
     <section>
       <h2>管理者向けの初期設定</h2>
       <ol>
-        <li>最初に <code>/setup</code> を実行すると、チャンネル選択と入力フォームで初期設定を進められます。</li>
+        <li>最初に <code>/setup</code> を実行すると、現在の設定を見ながら初期設定を進められます。</li>
         <li>Discordサーバー内に、日程調整用チャンネルと通知用チャンネルを分けて作っておくと運用しやすくなります。</li>
         <li>通知用チャンネルを未設定のまま使い始めた場合は、最初に日程調整を作成したチャンネルが通知先になります。</li>
-        <li><code>/notification_channel_setting</code> で集計や通知を送るチャンネルを設定します。</li>
-        <li>必要に応じて <code>/participant_role_setting</code> で日程調整の対象ロールを設定します。対象が24人を超える場合はロール設定を推奨します。</li>
-        <li><code>/schedule_setting</code> でイベント名と日数を設定します。</li>
-        <li><code>/reminder_setting</code> で開催日通知のタイミングとコメントを設定します。</li>
+        <li><code>/setup</code> から通知チャンネル、イベント名と日数、回答締切、開催日通知、メンション設定を変更できます。</li>
+        <li>参加予定者ロールは任意です。対象が24人を超える場合は、<code>/setup</code> の一番下から設定することを推奨します。</li>
+        <li>管理者向けコマンドは、Discord上でも管理者権限のあるメンバーにだけ表示されるように設定されています。</li>
         <li>定期的に作成したい場合は、まず同じイベント名で1回手動作成してから <code>/auto_schedule_start</code> を実行します。</li>
       </ol>
     </section>
@@ -211,7 +210,7 @@
           <tr>
             <td><code>/setup</code></td>
             <td>管理者</td>
-            <td>通知チャンネル、イベント名、日数の初期設定を案内します。</td>
+            <td>現在の設定を表示し、基本設定を画面上から変更します。</td>
           </tr>
           <tr>
             <td><code>/schedule_setting</code></td>

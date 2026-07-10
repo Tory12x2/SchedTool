@@ -42,7 +42,7 @@ from participants import (
     get_participant_role,
     is_participant_role_missing,
 )
-from views import SetupView, build_setup_status_text
+from views import SetupView, create_setup_embed
 
 
 # =========================
@@ -65,6 +65,7 @@ def setup_commands(client):
 
     client.tree.on_error = log_command_error
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="setup",
@@ -72,11 +73,12 @@ def setup_commands(client):
     )
     async def setup(interaction):
         await interaction.response.send_message(
-            build_setup_status_text(interaction.guild),
+            embed=create_setup_embed(interaction.guild),
             view=SetupView(),
             ephemeral=True,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="schedule_setting",
@@ -112,6 +114,7 @@ def setup_commands(client):
             days=days,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="schedule",
@@ -170,6 +173,7 @@ def setup_commands(client):
             days=days,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="auto_schedule_start",
@@ -237,6 +241,7 @@ def setup_commands(client):
             lead_days=lead_days,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="auto_schedule_stop",
@@ -314,6 +319,7 @@ def setup_commands(client):
             user_id=interaction.user.id,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="reminder_setting",
@@ -359,6 +365,7 @@ def setup_commands(client):
             hour=hour,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="deadline_setting",
@@ -402,6 +409,7 @@ def setup_commands(client):
             hour=hour,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="notification_channel_setting",
@@ -426,6 +434,7 @@ def setup_commands(client):
             channel_id=channel.id,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="notification_mention_setting",
@@ -450,6 +459,7 @@ def setup_commands(client):
             enabled=enabled,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="participant_role_setting",
@@ -479,6 +489,7 @@ def setup_commands(client):
             mentionable=role.mentionable,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="participant_role_clear",
@@ -493,6 +504,7 @@ def setup_commands(client):
         )
         log_info("command.participant_role.cleared", guild_id=interaction.guild.id)
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="admin_status",
@@ -540,6 +552,7 @@ def setup_commands(client):
         text = "イベント一覧\n\n" + "\n".join(f"・{event_id}" for event_id in events)
         await interaction.response.send_message(text, ephemeral=True)
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="announce",
@@ -572,6 +585,7 @@ def setup_commands(client):
             event_id=event_id,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="available_day_reminder_test",
@@ -695,6 +709,7 @@ def setup_commands(client):
             messages=len(messages),
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="delete",
@@ -718,6 +733,7 @@ def setup_commands(client):
             event_id=event_id,
         )
 
+    @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
         name="close",
