@@ -202,6 +202,11 @@ class MemberChangeTests(unittest.TestCase):
     def test_deadline_settings_are_saved_per_guild(self):
         guild_id = 91005
 
+        self.assertEqual(
+            get_deadline_settings(guild_id),
+            {"days_before": 1, "hour": 0},
+        )
+
         save_deadline_settings(3, 22, guild_id)
 
         self.assertEqual(
@@ -211,10 +216,10 @@ class MemberChangeTests(unittest.TestCase):
         self.assertEqual(build_deadline_text(3, 22), "各日程の3日前22時（開始日が当日の場合は当日23:59）")
 
     def test_current_deadline_default_stays_compatible(self):
-        deadline = build_deadline_at("20300110", 2, 24)
+        deadline = build_deadline_at("20300110", 1, 0)
 
         self.assertEqual(deadline.strftime("%Y-%m-%d %H:%M"), "2030-01-09 00:00")
-        self.assertEqual(build_deadline_text(2, 24), "各日程の2日前24時（開始日が当日の場合は当日23:59）")
+        self.assertEqual(build_deadline_text(1, 0), "各日程の1日前0時（開始日が当日の場合は当日23:59）")
 
 
 if __name__ == "__main__":

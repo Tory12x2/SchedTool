@@ -365,13 +365,13 @@ def setup_commands(client):
         description="日程調整の回答締切デフォルトを設定",
     )
     @app_commands.describe(
-        days_before="各日程の何日前を締切日にするか。現状維持は2",
-        hour="締切時刻。0〜24で指定。現状維持は24",
+        days_before="各日程の何日前を締切日にするか。初期値は1",
+        hour="締切時刻。0〜23で指定。初期値は0",
     )
     async def deadline_setting(
         interaction,
-        days_before: int = 2,
-        hour: int = 24,
+        days_before: int = 1,
+        hour: int = 0,
     ):
         if days_before < 0 or days_before > 30:
             await interaction.response.send_message(
@@ -380,19 +380,18 @@ def setup_commands(client):
             )
             return
 
-        if hour < 0 or hour > 24:
+        if hour < 0 or hour > 23:
             await interaction.response.send_message(
-                "締切時刻は0〜24時の範囲で指定してください。",
+                "締切時刻は0〜23時の範囲で指定してください。",
                 ephemeral=True,
             )
             return
 
         save_deadline_settings(days_before, hour, interaction.guild.id)
 
-        hour_text = "24時" if hour == 24 else f"{hour}時"
         await interaction.response.send_message(
             f"回答締切のデフォルトを保存しました。\n"
-            f"締切: 各日程の{days_before}日前{hour_text}\n\n"
+            f"締切: 各日程の{days_before}日前{hour}時\n\n"
             "この設定は、今後作成する日程調整に反映されます。",
             ephemeral=True,
         )
@@ -852,8 +851,7 @@ def format_schedule_settings(settings):
 
 
 def format_deadline_settings(settings):
-    hour_text = "24時" if settings["hour"] == 24 else f"{settings['hour']}時"
-    return f"各日程の{settings['days_before']}日前{hour_text}"
+    return f"各日程の{settings['days_before']}日前{settings['hour']}時"
 
 
 def format_auto_settings(guild, settings):

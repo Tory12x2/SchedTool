@@ -172,8 +172,8 @@ def initialize_database():
             reminder_days_before INTEGER,
             reminder_hour INTEGER,
             reminder_comment TEXT,
-            deadline_days_before INTEGER DEFAULT 2,
-            deadline_hour INTEGER DEFAULT 24
+            deadline_days_before INTEGER DEFAULT 1,
+            deadline_hour INTEGER DEFAULT 0
         )
         """
     )
@@ -184,16 +184,26 @@ def initialize_database():
         cursor.execute(
             """
             ALTER TABLE guild_settings
-            ADD COLUMN deadline_days_before INTEGER DEFAULT 2
+            ADD COLUMN deadline_days_before INTEGER DEFAULT 1
             """
         )
     if "deadline_hour" not in guild_setting_columns:
         cursor.execute(
             """
             ALTER TABLE guild_settings
-            ADD COLUMN deadline_hour INTEGER DEFAULT 24
+            ADD COLUMN deadline_hour INTEGER DEFAULT 0
             """
         )
+
+    cursor.execute(
+        """
+        UPDATE guild_settings
+        SET deadline_days_before = 1,
+            deadline_hour = 0
+        WHERE deadline_days_before = 2
+        AND deadline_hour = 24
+        """
+    )
 
     cursor.execute("PRAGMA table_info(bot_settings)")
     bot_setting_columns = {row[1] for row in cursor.fetchall()}
@@ -433,7 +443,7 @@ def initialize_default_guild_settings():
             deadline_days_before,
             deadline_hour
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 24)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)
         """,
         (
             GUILD_ID,
@@ -473,7 +483,7 @@ def ensure_guild_settings(guild_id):
             deadline_days_before,
             deadline_hour
         )
-        VALUES (?, ?, 1, NULL, NULL, NULL, 0, NULL, NULL, NULL, 1, 21, '', 2, 24)
+        VALUES (?, ?, 1, NULL, NULL, NULL, 0, NULL, NULL, NULL, 1, 21, '', 1, 0)
         """,
         (guild_id, None),
     )
@@ -1144,13 +1154,13 @@ def get_deadline_settings(guild_id=GUILD_ID):
     row = cursor.fetchone()
     if not row:
         return {
-            "days_before": 2,
-            "hour": 24,
+            "days_before": 1,
+            "hour": 0,
         }
 
     return {
-        "days_before": row[0] if row[0] is not None else 2,
-        "hour": row[1] if row[1] is not None else 24,
+        "days_before": row[0] if row[0] is not None else 1,
+        "hour": row[1] if row[1] is not None else 0,
     }
 
 

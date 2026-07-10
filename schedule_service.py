@@ -49,7 +49,7 @@ def split_dates(dates, size=DATE_GROUP_SIZE):
     return [dates[index : index + size] for index in range(0, len(dates), size)]
 
 
-def build_deadline_at(first_date_value, days_before=2, hour=24):
+def build_deadline_at(first_date_value, days_before=1, hour=0):
     first_date = datetime.strptime(first_date_value, "%Y%m%d")
     today = datetime.now(TIMEZONE).date()
 
@@ -59,17 +59,12 @@ def build_deadline_at(first_date_value, days_before=2, hour=24):
             second=0,
         )
 
-    if hour == 24:
-        deadline_date = first_date.date() - timedelta(days=max(days_before - 1, 0))
-        return datetime.combine(deadline_date, datetime.min.time())
-
     deadline_date = first_date.date() - timedelta(days=days_before)
     return datetime.combine(deadline_date, datetime.min.time()).replace(hour=hour)
 
 
-def build_deadline_text(days_before=2, hour=24):
-    hour_text = "24時" if hour == 24 else f"{hour}時"
-    return f"各日程の{days_before}日前{hour_text}（開始日が当日の場合は当日23:59）"
+def build_deadline_text(days_before=1, hour=0):
+    return f"各日程の{days_before}日前{hour}時（開始日が当日の場合は当日23:59）"
 
 
 async def create_schedule(client, guild, schedule_channel, event_name, start_date, days):

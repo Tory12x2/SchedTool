@@ -58,8 +58,6 @@ def build_setup_status_text(guild):
     channel_text = result_channel.mention if result_channel else "未設定"
     role = get_participant_role(guild)
     deadline_settings = get_deadline_settings(guild.id)
-    deadline_hour = deadline_settings["hour"]
-    deadline_hour_text = "24時" if deadline_hour == 24 else f"{deadline_hour}時"
     if is_participant_role_missing(guild):
         role_text = "設定ロールが見つかりません（再設定が必要です）"
     elif role:
@@ -73,7 +71,7 @@ def build_setup_status_text(guild):
         f"イベント設定: {schedule_text}\n\n"
         f"参加予定者: {role_text}\n"
         f"対象人数: {len(get_participant_members(guild))}人\n"
-        f"回答締切: 各日程の{deadline_settings['days_before']}日前{deadline_hour_text}\n\n"
+        f"回答締切: 各日程の{deadline_settings['days_before']}日前{deadline_settings['hour']}時\n\n"
         "1. 「通知チャンネルを設定」から、集計や通知を送るチャンネルを選びます。\n"
         "2. 「イベント名と日数を設定する」で、日程調整の基本設定を保存します。\n"
         "3. 必要に応じて「参加予定者ロールを設定」から対象者を選びます。\n"
