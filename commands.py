@@ -1,29 +1,26 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import discord
 from discord import app_commands
 
 from config import MAX_DAYS
 from close_service import close_schedule
-from auto_scheduler import (
-    build_available_day_reminder_messages,
-    get_non_bot_member_ids,
-)
 from database import (
     clear_participant_role_id,
     delete_event,
     get_auto_schedule_settings,
+    get_custom_announce_settings,
     get_dates,
     get_deadline_settings,
     get_event_list,
     get_latest_event_period,
     get_notification_mention_enabled,
-    get_participant_role_id,
     get_result_channel_id,
     get_reminder_settings,
     get_schedule_settings,
     get_users,
     save_auto_schedule_settings,
+    save_custom_announce_settings,
     save_deadline_settings,
     save_notification_mention_enabled,
     save_participant_role_id,
@@ -341,13 +338,11 @@ def setup_commands(client):
     @app_commands.describe(
         days_before="何日前に通知するか。省略時は1日前",
         hour="何時に通知するか。0〜23で指定。省略時は21時",
-        comment="通知に添える一言コメント",
     )
     async def reminder_setting(
         interaction,
         days_before: int = 1,
         hour: int = 21,
-        comment: str = "",
     ):
         if days_before < 0:
             await interaction.response.send_message(
@@ -363,12 +358,18 @@ def setup_commands(client):
             )
             return
 
-        save_reminder_settings(days_before, hour, comment.strip(), interaction.guild.id)
+        current_settings = get_reminder_settings(interaction.guild.id)
+        save_reminder_settings(
+            days_before,
+            hour,
+            current_settings["comment"],
+            interaction.guild.id,
+        )
 
         await interaction.response.send_message(
             f"開催日通知の設定を保存しました。\n"
-            f"通知タイミング: {days_before}日前の{hour}時\n"
-            f"コメント: {comment.strip() or 'なし'}",
+            f"通知タイミング: {days_before}日前の{hour}時\n\n"
+            "一言コメントは /setup の「開催日通知」から変更できます。",
             ephemeral=True,
         )
         log_info(
@@ -601,126 +602,11 @@ def setup_commands(client):
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     @client.tree.command(
-        name="available_day_reminder_test",
-        description="開催日通知をテスト送信",
+        name="custom_announce",
+        description="任意のイベント告知を登録",
     )
-    @app_commands.describe(
-        event_id="イベントID",
-        date="通知する日付 YYYY-MM-DD",
-    )
-    async def available_day_reminder_test(
-        interaction,
-        event_id: str,
-        date: str,
-    ):
-        dates = get_dates(event_id, interaction.guild.id)
-        if not dates:
-            await interaction.response.send_message(
-                "イベントが見つかりません",
-                ephemeral=True,
-            )
-            return
-
-        try:
-            target_date = datetime.strptime(date, "%Y-%m-%d")
-        except ValueError:
-            await interaction.response.send_message(
-                "日付形式は YYYY-MM-DD で入力してください。",
-                ephemeral=True,
-            )
-            return
-
-        target_value = target_date.strftime("%Y%m%d")
-        if target_value not in {schedule_date["value"] for schedule_date in dates}:
-            await interaction.response.send_message(
-                "指定した日付はこのイベントに含まれていません。",
-                ephemeral=True,
-            )
-            return
-
-        available_users = get_users(
-            event_id,
-            target_value,
-            "available",
-            interaction.guild.id,
-        )
-        if is_participant_role_missing(interaction.guild):
-            await interaction.response.send_message(
-                "設定されている参加予定者ロールが見つかりません。再設定してください。",
-                ephemeral=True,
-            )
-            return
-
-        member_ids = get_non_bot_member_ids(interaction.guild)
-        if not member_ids:
-            await interaction.response.send_message(
-                "通知対象のメンバーがいません。",
-                ephemeral=True,
-            )
-            return
-        available_users &= member_ids
-        unavailable_users = (
-            get_users(event_id, target_value, "no", interaction.guild.id) & member_ids
-        )
-        if unavailable_users:
-            await interaction.response.send_message(
-                "指定した日付に不参加の人がいるため、通知対象外です。",
-                ephemeral=True,
-            )
-            return
-
-        maybe_users = (
-            get_users(event_id, target_value, "maybe", interaction.guild.id) & member_ids
-        )
-        answered_users = available_users | maybe_users | unavailable_users
-
-        if not member_ids.issubset(answered_users):
-            await interaction.response.send_message(
-                "指定した日付は、まだ全員の予定が入力されていません。",
-                ephemeral=True,
-            )
-            return
-
-        channel = client.get_channel(get_result_channel_id(interaction.guild.id))
-        if not channel:
-            await interaction.response.send_message(
-                "通知チャンネルが見つかりません。/notification_channel_setting で設定してください。",
-                ephemeral=True,
-            )
-            return
-
-        reminder_settings = get_reminder_settings(interaction.guild.id)
-        messages = build_available_day_reminder_messages(
-            event_id,
-            target_date,
-            available_users,
-            maybe_users,
-            reminder_settings["comment"],
-            get_notification_mention_enabled(interaction.guild.id),
-            get_participant_role_id(interaction.guild.id),
-        )
-        for index, message in enumerate(messages):
-            prefix = "[テスト送信]\n" if index == 0 else "[テスト送信・続き]\n"
-            await channel.send(
-                prefix + message,
-                allowed_mentions=discord.AllowedMentions(
-                    everyone=False,
-                    users=True,
-                    roles=True,
-                ),
-            )
-
-        await interaction.response.send_message(
-            f"{channel.mention} にテスト通知を送信しました。",
-            ephemeral=True,
-        )
-        log_info(
-            "command.available_day_reminder_test.sent",
-            guild_id=interaction.guild.id,
-            channel_id=channel.id,
-            event_id=event_id,
-            messages=len(messages),
-        )
+    async def custom_announce(interaction):
+        await interaction.response.send_modal(CustomAnnounceModal(interaction.guild.id))
 
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
@@ -785,7 +671,7 @@ def setup_commands(client):
         raise error
 
     announce.error(admin_command_error)
-    available_day_reminder_test.error(admin_command_error)
+    custom_announce.error(admin_command_error)
     setup.error(admin_command_error)
     schedule_setting.error(admin_command_error)
     schedule.error(admin_command_error)
@@ -810,6 +696,127 @@ def get_interaction_command_name(interaction):
     if not interaction.command:
         return "unknown"
     return getattr(interaction.command, "qualified_name", interaction.command.name)
+
+
+class CustomAnnounceModal(discord.ui.Modal, title="カスタムアナウンスを登録"):
+    event_name = discord.ui.TextInput(
+        label="イベント名",
+        placeholder="例: 定例会",
+        max_length=80,
+    )
+    target_date = discord.ui.TextInput(
+        label="開催日（YYYY-MM-DD）",
+        placeholder="例: 2026-08-01",
+        max_length=10,
+    )
+    days_before = discord.ui.TextInput(
+        label="何日前に通知するか",
+        placeholder="例: 1",
+        default="1",
+        max_length=2,
+    )
+    hour = discord.ui.TextInput(
+        label="通知時刻（0〜23）",
+        placeholder="例: 21",
+        default="21",
+        max_length=2,
+    )
+    comment = discord.ui.TextInput(
+        label="通知に添えるコメント",
+        required=False,
+        max_length=500,
+        style=discord.TextStyle.paragraph,
+    )
+
+    def __init__(self, guild_id):
+        super().__init__()
+        settings = get_custom_announce_settings(guild_id)
+        if settings:
+            self.event_name.default = settings["event_name"]
+            self.target_date.default = settings["target_date"]
+            self.days_before.default = str(settings["days_before"])
+            self.hour.default = str(settings["hour"])
+            self.comment.default = settings["comment"]
+
+    async def on_submit(self, interaction):
+        event_name = str(self.event_name.value).strip()
+        target_date_text = str(self.target_date.value).strip()
+
+        if not event_name:
+            await interaction.response.send_message(
+                "イベント名を入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            target_date = datetime.strptime(target_date_text, "%Y-%m-%d").date()
+        except ValueError:
+            await interaction.response.send_message(
+                "開催日は YYYY-MM-DD で入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        try:
+            days_before = int(str(self.days_before.value).strip())
+            hour = int(str(self.hour.value).strip())
+        except ValueError:
+            await interaction.response.send_message(
+                "通知日は数字で入力してください。",
+                ephemeral=True,
+            )
+            return
+
+        if days_before < 0:
+            await interaction.response.send_message(
+                "何日前に通知するかは0以上で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        if hour < 0 or hour > 23:
+            await interaction.response.send_message(
+                "通知時刻は0〜23時の範囲で指定してください。",
+                ephemeral=True,
+            )
+            return
+
+        channel = interaction.client.get_channel(get_result_channel_id(interaction.guild.id))
+        if not channel:
+            await interaction.response.send_message(
+                "通知チャンネルが見つかりません。/setup で通知チャンネルを設定してください。",
+                ephemeral=True,
+            )
+            return
+
+        comment = str(self.comment.value).strip()
+        save_custom_announce_settings(
+            event_name,
+            target_date.strftime("%Y-%m-%d"),
+            days_before,
+            hour,
+            comment,
+            interaction.guild.id,
+        )
+
+        notify_date = target_date - timedelta(days=days_before)
+        await interaction.response.send_message(
+            "カスタムアナウンスを登録しました。\n"
+            f"イベント: {event_name}\n"
+            f"開催日: {target_date.strftime('%Y-%m-%d')}\n"
+            f"通知予定: {notify_date.strftime('%Y-%m-%d')} {hour}時以降\n"
+            f"通知先: {channel.mention}\n"
+            f"コメント: {comment or 'なし'}",
+            ephemeral=True,
+        )
+        log_info(
+            "command.custom_announce.saved",
+            guild_id=interaction.guild.id,
+            channel_id=channel.id,
+            days_before=days_before,
+            hour=hour,
+        )
 
 
 def build_admin_status_lines(guild, events, participant_members, participant_ids, guild_id):

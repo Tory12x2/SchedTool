@@ -265,7 +265,7 @@
           <tr>
             <td><code>/reminder_setting</code></td>
             <td>管理者</td>
-            <td>開催日通知のタイミングと一言コメントを設定します。</td>
+            <td>開催日通知のタイミングを設定します。一言コメントは <code>/setup</code> から設定します。</td>
           </tr>
           <tr>
             <td><code>/deadline_setting</code></td>
@@ -273,9 +273,9 @@
             <td>回答締切のデフォルトを設定します。</td>
           </tr>
           <tr>
-            <td><code>/available_day_reminder_test</code></td>
+            <td><code>/custom_announce</code></td>
             <td>管理者</td>
-            <td>開催日通知の見た目をテスト送信します。</td>
+            <td>日程調整とは別に、任意のイベント告知を通知チャンネルへ予約します。</td>
           </tr>
           <tr>
             <td><code>/admin_status</code></td>
@@ -303,7 +303,8 @@
       <p>参加予定者ロールを設定している場合は、開催日通知でそのロールをメンションします。ロールはDiscord側でメンション可能にしてください。</p>
       <p>設定中のロールが削除された場合は、自動作成と通知を停止し、再設定が必要であることを通知します。</p>
       <p>イベント作成後にサーバーへ参加した人や対象ロールへ追加された人には、毎日の通知設定時刻に回答募集中であることを1回案内します。</p>
-      <p class="note">通知タイミングやコメントは <code>/reminder_setting</code> で変更できます。</p>
+      <p class="note">通知タイミングは <code>/reminder_setting</code>、一言コメントは <code>/setup</code> で変更できます。</p>
+      <p class="note">日程調整と関係ない告知を予約したい場合は、<code>/custom_announce</code> を使用します。</p>
     </section>
 
     <section>

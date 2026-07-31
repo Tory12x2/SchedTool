@@ -301,6 +301,22 @@ def initialize_database():
         """
     )
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS custom_announce_settings (
+            guild_id INTEGER PRIMARY KEY,
+            event_name TEXT,
+            target_date TEXT,
+            days_before INTEGER,
+            hour INTEGER,
+            comment TEXT,
+            active INTEGER,
+            sent_at TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+
     migrate_legacy_data_to_default_guild()
     initialize_default_guild_settings()
 
@@ -1200,6 +1216,113 @@ def mark_reminder_sent(event_id, date, guild_id=GUILD_ID):
         VALUES (?, ?)
         """,
         (event_id, date),
+    )
+    conn.commit()
+
+
+def save_custom_announce_settings(
+    event_name,
+    target_date,
+    days_before,
+    hour,
+    comment,
+    guild_id=GUILD_ID,
+):
+    ensure_guild_settings(guild_id)
+    cursor.execute(
+        """
+        INSERT INTO custom_announce_settings (
+            guild_id,
+            event_name,
+            target_date,
+            days_before,
+            hour,
+            comment,
+            active,
+            sent_at,
+            updated_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, 1, NULL, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+            event_name = excluded.event_name,
+            target_date = excluded.target_date,
+            days_before = excluded.days_before,
+            hour = excluded.hour,
+            comment = excluded.comment,
+            active = 1,
+            sent_at = NULL,
+            updated_at = excluded.updated_at
+        """,
+        (
+            guild_id,
+            event_name,
+            target_date,
+            days_before,
+            hour,
+            comment,
+            datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    conn.commit()
+
+
+def get_custom_announce_settings(guild_id=GUILD_ID):
+    cursor.execute(
+        """
+        SELECT event_name, target_date, days_before, hour, comment, active, sent_at
+        FROM custom_announce_settings
+        WHERE guild_id = ?
+        """,
+        (guild_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+
+    return {
+        "guild_id": guild_id,
+        "event_name": row[0],
+        "target_date": row[1],
+        "days_before": row[2],
+        "hour": row[3],
+        "comment": row[4] or "",
+        "active": bool(row[5]),
+        "sent_at": row[6],
+    }
+
+
+def get_pending_custom_announces():
+    cursor.execute(
+        """
+        SELECT guild_id, event_name, target_date, days_before, hour, comment
+        FROM custom_announce_settings
+        WHERE active = 1
+        AND sent_at IS NULL
+        ORDER BY target_date, hour, guild_id
+        """
+    )
+    return [
+        {
+            "guild_id": row[0],
+            "event_name": row[1],
+            "target_date": row[2],
+            "days_before": row[3],
+            "hour": row[4],
+            "comment": row[5] or "",
+        }
+        for row in cursor.fetchall()
+    ]
+
+
+def mark_custom_announce_sent(guild_id=GUILD_ID):
+    cursor.execute(
+        """
+        UPDATE custom_announce_settings
+        SET sent_at = ?,
+            active = 0
+        WHERE guild_id = ?
+        """,
+        (datetime.now(TIMEZONE).strftime("%Y-%m-%d %H:%M:%S"), guild_id),
     )
     conn.commit()
 

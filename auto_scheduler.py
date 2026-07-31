@@ -9,6 +9,7 @@ from close_service import close_schedule_group
 from config import WEEKDAYS
 from database import (
     get_active_auto_schedule_settings,
+    get_pending_custom_announces,
     get_notification_mention_enabled,
     get_open_events_with_deadlines,
     get_open_event_groups_with_deadlines,
@@ -24,6 +25,7 @@ from database import (
     mark_missing_role_alert,
     mark_event_participants_inactive,
     mark_participant_scan_run,
+    mark_custom_announce_sent,
     mark_reminder_sent,
     sync_event_participants,
     update_auto_schedule_next_start,
@@ -63,6 +65,7 @@ async def auto_schedule_loop(client):
             await run_deadline_close_once(client)
             await run_participant_growth_once(client)
             await run_available_day_reminder_once(client)
+            await run_custom_announce_once(client)
             maybe_log_daily_health(client, datetime.now(TIMEZONE).date())
             log_info("auto_loop.completed", elapsed_ms=elapsed_ms(loop_started))
         except Exception as error:
@@ -229,6 +232,51 @@ async def run_available_day_reminder_once(client):
         target_events=target_events,
         sent=sent_count,
     )
+
+
+async def run_custom_announce_once(client):
+    now = datetime.now(TIMEZONE)
+    sent_count = 0
+    skipped_count = 0
+
+    for settings in get_pending_custom_announces():
+        try:
+            target_date = datetime.strptime(settings["target_date"], "%Y-%m-%d").date()
+        except ValueError:
+            skipped_count += 1
+            log_warning(
+                "custom_announce.invalid_date",
+                guild_id=settings["guild_id"],
+                target_date=settings["target_date"],
+            )
+            continue
+
+        notify_date = target_date - timedelta(days=settings["days_before"])
+        if now.date() < notify_date or (now.date() == notify_date and now.hour < settings["hour"]):
+            skipped_count += 1
+            continue
+
+        channel = client.get_channel(get_result_channel_id(settings["guild_id"]))
+        if not channel:
+            skipped_count += 1
+            continue
+
+        await channel.send(
+            build_custom_announce_text(
+                settings["event_name"],
+                target_date,
+                settings["comment"],
+            ),
+            allowed_mentions=discord.AllowedMentions(
+                everyone=False,
+                users=True,
+                roles=True,
+            ),
+        )
+        mark_custom_announce_sent(settings["guild_id"])
+        sent_count += 1
+
+    log_info("custom_announce.checked", sent=sent_count, skipped=skipped_count)
 
 
 async def run_participant_growth_once(client):
@@ -424,5 +472,18 @@ def build_available_day_reminder_text(
         f"参加可能: {available_text}\n"
         f"保留: {maybe_text}\n"
         f"開催確率: {probability:g}%…保留の方は確定次第コメントください"
+        f"{comment_line}"
+    )
+
+
+def build_custom_announce_text(event_name, target_date, comment):
+    weekday = WEEKDAYS[target_date.weekday()]
+    label = target_date.strftime("%m/%d") + f"({weekday})"
+    comment_line = f"\n{comment[:500]}" if comment else ""
+
+    return (
+        "開催日のお知らせ\n"
+        f"イベント: {event_name}\n"
+        f"日程: {label}"
         f"{comment_line}"
     )
