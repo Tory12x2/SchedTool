@@ -53,16 +53,29 @@ from views import SetupView, create_setup_embed
 
 
 def setup_commands(client):
+    async def log_command_invoked(interaction):
+        command_name = get_interaction_command_name(interaction)
+        log_info(
+            "command.used",
+            command=command_name,
+            guild_id=interaction.guild.id if interaction.guild else None,
+            channel_id=interaction.channel.id if interaction.channel else None,
+            user_id=interaction.user.id if interaction.user else None,
+        )
+        return True
+
     async def log_command_error(interaction, error):
-        command_name = interaction.command.name if interaction.command else "unknown"
+        command_name = get_interaction_command_name(interaction)
         log_error(
             "command.failed",
             error,
             command=command_name,
             guild_id=interaction.guild.id if interaction.guild else None,
             channel_id=interaction.channel.id if interaction.channel else None,
+            user_id=interaction.user.id if interaction.user else None,
         )
 
+    client.tree.interaction_check = log_command_invoked
     client.tree.on_error = log_command_error
 
     @app_commands.default_permissions(administrator=True)
@@ -791,6 +804,12 @@ def setup_commands(client):
 
 def get_participant_members_for_status(guild):
     return get_participant_members(guild)
+
+
+def get_interaction_command_name(interaction):
+    if not interaction.command:
+        return "unknown"
+    return getattr(interaction.command, "qualified_name", interaction.command.name)
 
 
 def build_admin_status_lines(guild, events, participant_members, participant_ids, guild_id):
