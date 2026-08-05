@@ -52,7 +52,19 @@ from schedule_service import create_schedule
 
 
 TIMEZONE = ZoneInfo("Asia/Tokyo")
-CHECK_INTERVAL_SECONDS = 60 * 60
+
+
+async def sleep_until_next_hour():
+    """Wait for the next hourly boundary without carrying over loop drift."""
+    now = datetime.now(TIMEZONE)
+    next_run = now.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+    sleep_seconds = max((next_run - now).total_seconds(), 1)
+    log_info(
+        "auto_loop.waiting",
+        next_run=next_run.strftime("%Y-%m-%d %H:%M:%S %Z"),
+        sleep_seconds=round(sleep_seconds, 1),
+    )
+    await asyncio.sleep(sleep_seconds)
 
 
 async def auto_schedule_loop(client):
@@ -71,7 +83,7 @@ async def auto_schedule_loop(client):
         except Exception as error:
             log_error("auto_loop.failed", error)
 
-        await asyncio.sleep(CHECK_INTERVAL_SECONDS)
+        await sleep_until_next_hour()
 
 
 async def run_auto_schedule_once(client):
