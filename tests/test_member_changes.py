@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from datetime import datetime
+from unittest.mock import AsyncMock, patch
 
 import discord
 
@@ -29,6 +30,11 @@ from embeds import (
 )
 from participants import can_member_answer, get_participant_members
 from schedule_service import build_deadline_at, build_deadline_text
+from views import (
+    _pending_result_updates,
+    _result_update_workers,
+    queue_result_message_update,
+)
 
 
 class FakePermissions:
@@ -80,6 +86,34 @@ class FakeClient:
 
     def get_channel(self, channel_id):
         return self.channel if self.channel.id == channel_id else None
+
+
+class ResultUpdateQueueTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        _pending_result_updates.clear()
+        _result_update_workers.clear()
+
+    async def asyncTearDown(self):
+        for worker in _result_update_workers.values():
+            worker.cancel()
+        _pending_result_updates.clear()
+        _result_update_workers.clear()
+
+    async def test_rapid_answers_share_one_result_update(self):
+        first_client = object()
+        latest_client = object()
+        first_guild = object()
+        latest_guild = object()
+
+        with (
+            patch("views.RESULT_UPDATE_DELAY_SECONDS", 0.01),
+            patch("views.update_result_message", new_callable=AsyncMock) as update,
+        ):
+            queue_result_message_update(first_client, first_guild, "event", 91006)
+            queue_result_message_update(latest_client, latest_guild, "event", 91006)
+            await asyncio.sleep(0.03)
+
+        update.assert_awaited_once_with(latest_client, latest_guild, "event", 91006)
 
 
 class MemberChangeTests(unittest.TestCase):

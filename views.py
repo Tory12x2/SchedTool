@@ -50,6 +50,9 @@ from participants import (
 
 
 TIMEZONE = ZoneInfo("Asia/Tokyo")
+RESULT_UPDATE_DELAY_SECONDS = 2
+_pending_result_updates = {}
+_result_update_workers = {}
 
 
 def create_setup_embed(guild):
@@ -665,7 +668,6 @@ class ScheduleButton(discord.ui.Button):
             status=self.status,
         )
 
-        all_dates = get_dates(self.event_id, self.guild_id)
         await interaction.edit_original_response(
             embed=create_personal_embed(
                 interaction.guild,
@@ -682,8 +684,11 @@ class ScheduleButton(discord.ui.Button):
                 selected_user_id=interaction.user.id,
             ),
         )
-        asyncio.create_task(
-            update_result_message(interaction, self.event_id, self.guild_id, all_dates)
+        queue_result_message_update(
+            interaction.client,
+            interaction.guild,
+            self.event_id,
+            self.guild_id,
         )
 
 
@@ -743,21 +748,54 @@ class ScheduleView(discord.ui.View):
                 self.add_item(button)
 
 
-async def update_result_message(interaction, event_id, guild_id, dates):
+def queue_result_message_update(client, guild, event_id, guild_id):
+    """Coalesce rapid answers into one result-message update per event."""
+    key = (guild_id, event_id)
+    _pending_result_updates[key] = (client, guild, event_id, guild_id)
+
+    worker = _result_update_workers.get(key)
+    if worker and not worker.done():
+        return
+
+    _result_update_workers[key] = asyncio.create_task(
+        process_result_update_queue(key)
+    )
+
+
+async def process_result_update_queue(key):
+    try:
+        while key in _pending_result_updates:
+            await asyncio.sleep(RESULT_UPDATE_DELAY_SECONDS)
+            update = _pending_result_updates.pop(key, None)
+            if not update:
+                continue
+
+            await update_result_message(*update)
+    finally:
+        _result_update_workers.pop(key, None)
+
+
+async def update_result_message(client, guild, event_id, guild_id):
     data = get_result_message(event_id, guild_id)
     if not data:
         return
 
     channel_id, message_id = data
-    channel = interaction.client.get_channel(channel_id)
+    channel = client.get_channel(channel_id)
     if not channel:
         return
 
     try:
         message = await channel.fetch_message(message_id)
         await message.edit(
-            embed=create_result_embed(interaction.guild, event_id, dates),
+            embed=create_result_embed(guild, event_id, get_dates(event_id, guild_id)),
             view=None,
         )
-    except discord.DiscordException:
-        return
+    except discord.DiscordException as error:
+        log_warning(
+            "schedule.result_update.failed",
+            guild_id=guild_id,
+            event_id=event_id,
+            error_type=error.__class__.__name__,
+            error=str(error)[:300],
+        )
