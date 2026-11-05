@@ -35,11 +35,12 @@ from operational_logging import log_error, log_info, log_warning
 from schedule_service import create_schedule
 from participants import (
     build_large_group_warning,
+    get_channel_access_issue,
     get_participant_members,
     get_participant_role,
     is_participant_role_missing,
 )
-from views import SetupView, create_setup_embed
+from views import SetupView, create_setup_embed, get_guild_channel_access_issues
 
 
 # =========================
@@ -59,6 +60,31 @@ def setup_commands(client):
             channel_id=interaction.channel.id if interaction.channel else None,
             user_id=interaction.user.id if interaction.user else None,
         )
+
+        recovery_commands = {
+            "setup",
+            "notification_channel_setting",
+            "auto_schedule_stop",
+        }
+        access_issues = (
+            get_guild_channel_access_issues(interaction.guild)
+            if interaction.guild
+            else []
+        )
+        if access_issues and command_name not in recovery_commands:
+            await interaction.response.send_message(
+                "SchedToolのチャンネル設定に問題があります。\n"
+                + "\n".join(access_issues)
+                + "\n\n管理者は `/setup` で通知チャンネルを設定し直すか、"
+                "Botへ「チャンネルを見る」「メッセージを送信」「埋め込みリンク」権限を付与してください。",
+                ephemeral=True,
+            )
+            log_warning(
+                "command.blocked.channel_access",
+                guild_id=interaction.guild.id,
+                command=command_name,
+            )
+            return False
         return True
 
     async def log_command_error(interaction, error):
@@ -436,6 +462,18 @@ def setup_commands(client):
         interaction,
         channel: discord.TextChannel,
     ):
+        issue = get_channel_access_issue(
+            interaction.guild,
+            channel,
+            "選択した通知チャンネル",
+        )
+        if issue:
+            await interaction.response.send_message(
+                f"{issue}\nBotへ権限を付与してから、もう一度設定してください。",
+                ephemeral=True,
+            )
+            return
+
         save_result_channel_id(channel.id, interaction.guild.id)
 
         await interaction.response.send_message(

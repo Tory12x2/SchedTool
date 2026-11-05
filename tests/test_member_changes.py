@@ -28,7 +28,11 @@ from embeds import (
     create_monthly_table_embed,
     get_monthly_table_page_count,
 )
-from participants import can_member_answer, get_participant_members
+from participants import (
+    can_member_answer,
+    get_channel_access_issue,
+    get_participant_members,
+)
 from schedule_service import build_deadline_at, build_deadline_text
 from views import (
     _pending_result_updates,
@@ -38,8 +42,17 @@ from views import (
 
 
 class FakePermissions:
-    def __init__(self, administrator=False):
+    def __init__(
+        self,
+        administrator=False,
+        view_channel=True,
+        send_messages=True,
+        embed_links=True,
+    ):
         self.administrator = administrator
+        self.view_channel = view_channel
+        self.send_messages = send_messages
+        self.embed_links = embed_links
 
 
 class FakeMember:
@@ -77,6 +90,35 @@ class FakeChannel:
 
     async def send(self, content, **kwargs):
         self.messages.append(content)
+
+    def permissions_for(self, member):
+        return member.permissions
+
+
+class FakeBotMember:
+    def __init__(self, permissions):
+        self.permissions = permissions
+
+
+class FakePermissionGuild:
+    def __init__(self, permissions):
+        self.me = FakeBotMember(permissions)
+
+
+class ChannelAccessTests(unittest.TestCase):
+    def test_missing_send_permission_is_reported(self):
+        guild = FakePermissionGuild(FakePermissions(send_messages=False))
+        channel = FakeChannel(901)
+
+        issue = get_channel_access_issue(guild, channel, "通知チャンネル")
+
+        self.assertIn("メッセージを送信", issue)
+
+    def test_required_permissions_are_accepted(self):
+        guild = FakePermissionGuild(FakePermissions())
+        channel = FakeChannel(902)
+
+        self.assertIsNone(get_channel_access_issue(guild, channel, "通知チャンネル"))
 
 
 class FakeClient:

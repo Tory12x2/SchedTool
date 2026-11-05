@@ -2,6 +2,31 @@ from database import get_participant_role_id
 
 
 PARTICIPANT_PAGE_SIZE = 24
+CHANNEL_PERMISSION_LABELS = {
+    "view_channel": "チャンネルを見る",
+    "send_messages": "メッセージを送信",
+    "embed_links": "埋め込みリンク",
+}
+
+
+def get_channel_access_issue(guild, channel, label):
+    if not channel:
+        return f"{label}が見つかりません。"
+
+    bot_member = getattr(guild, "me", None)
+    if not bot_member:
+        return f"{label}でBotの権限を確認できません。"
+
+    permissions = channel.permissions_for(bot_member)
+    missing = [
+        permission_label
+        for permission_name, permission_label in CHANNEL_PERMISSION_LABELS.items()
+        if not getattr(permissions, permission_name, False)
+    ]
+    if missing:
+        return f"{label}でBotに「{'」「'.join(missing)}」権限がありません。"
+
+    return None
 
 
 def get_participant_role(guild):

@@ -36,6 +36,7 @@ from operational_logging import log_info, log_warning
 from participants import (
     build_large_group_warning,
     can_member_answer,
+    get_channel_access_issue,
     get_participant_members,
     get_participant_role,
     is_participant_role_missing,
@@ -53,6 +54,31 @@ TIMEZONE = ZoneInfo("Asia/Tokyo")
 RESULT_UPDATE_DELAY_SECONDS = 2
 _pending_result_updates = {}
 _result_update_workers = {}
+
+
+def get_guild_channel_access_issues(guild):
+    issues = []
+    result_channel_id = get_result_channel_id(guild.id)
+    if result_channel_id:
+        issue = get_channel_access_issue(
+            guild,
+            guild.get_channel(result_channel_id),
+            "通知チャンネル",
+        )
+        if issue:
+            issues.append(issue)
+
+    auto_settings = get_auto_schedule_settings(guild.id)
+    if auto_settings and auto_settings["active"]:
+        issue = get_channel_access_issue(
+            guild,
+            guild.get_channel(auto_settings["channel_id"]),
+            "自動作成の投稿先チャンネル",
+        )
+        if issue:
+            issues.append(issue)
+
+    return issues
 
 
 def create_setup_embed(guild):
@@ -123,6 +149,14 @@ def create_setup_embed(guild):
     warning = build_large_group_warning(guild).strip()
     if warning:
         embed.add_field(name="注意", value=warning, inline=False)
+
+    access_issues = get_guild_channel_access_issues(guild)
+    if access_issues:
+        embed.add_field(
+            name="権限エラー",
+            value="\n".join(access_issues) + "\n通知チャンネルを設定し直すか、Botへ権限を付与してください。",
+            inline=False,
+        )
 
     embed.set_footer(text="設定後、/schedule start:YYYY-MM-DD で日程調整を作成できます")
     return embed
@@ -338,6 +372,17 @@ class SetupView(discord.ui.View):
     )
     async def set_notification_channel(self, interaction, select):
         channel = select.values[0]
+        issue = get_channel_access_issue(
+            interaction.guild,
+            channel,
+            "選択した通知チャンネル",
+        )
+        if issue:
+            await interaction.response.send_message(
+                f"{issue}\nBotへ権限を付与してから、もう一度選択してください。",
+                ephemeral=True,
+            )
+            return
         save_result_channel_id(channel.id, interaction.guild.id)
         await interaction.response.edit_message(
             embed=create_setup_embed(interaction.guild),

@@ -1,8 +1,11 @@
+import discord
+
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from config import WEEKDAYS
 from database import (
+    delete_event,
     get_deadline_settings,
     get_result_channel_id,
     initialize_event_participants,
@@ -14,7 +17,11 @@ from database import (
     save_schedule_message,
 )
 from embeds import create_result_embed
-from participants import get_participant_member_ids, is_participant_role_missing
+from participants import (
+    get_channel_access_issue,
+    get_participant_member_ids,
+    is_participant_role_missing,
+)
 from views import OpenScheduleView
 
 
@@ -91,6 +98,26 @@ async def create_schedule(client, guild, schedule_channel, event_name, start_dat
     ]
     final_deadline_at = max(deadlines)
 
+    result_channel_id = get_result_channel_id(guild_id)
+    result_channel = client.get_channel(result_channel_id) if result_channel_id else None
+    if not result_channel:
+        if result_channel_id:
+            raise RuntimeError(
+                "通知チャンネルが見つかりません。/setup で通知先を設定してください。"
+            )
+        result_channel = schedule_channel
+
+    for channel, label in (
+        (schedule_channel, "日程調整の投稿先チャンネル"),
+        (result_channel, "通知チャンネル"),
+    ):
+        issue = get_channel_access_issue(guild, channel, label)
+        if issue:
+            raise RuntimeError(f"{issue} /setup で設定を確認してください。")
+
+    if not result_channel_id:
+        save_result_channel_id(schedule_channel.id, guild_id)
+
     save_event_dates(event_id, dates, guild_id)
     initialize_event_participants(
         event_id,
@@ -113,33 +140,27 @@ async def create_schedule(client, guild, schedule_channel, event_name, start_dat
             guild_id=guild_id,
         )
 
-    result_channel_id = get_result_channel_id(guild_id)
-    result_channel = client.get_channel(result_channel_id) if result_channel_id else None
-    if not result_channel:
-        if result_channel_id:
-            raise RuntimeError(
-                "通知チャンネルが見つかりません。/notification_channel_setting で通知先を設定してください。"
-            )
-
-        save_result_channel_id(schedule_channel.id, guild_id)
-        result_channel = schedule_channel
-
-    if not result_channel:
-        raise RuntimeError(
-            "通知チャンネルが見つかりません。/notification_channel_setting で通知先を設定してください。"
+    schedule_message = None
+    try:
+        schedule_message = await schedule_channel.send(
+            f"日程調整: {event_id}\n"
+            f"締切: {build_deadline_text(deadline_settings['days_before'], deadline_settings['hour'])}\n"
+            "参加可否を回答するには、対象の日程ボタンを押してください。",
+            view=OpenScheduleView(event_id, guild_id, dates),
         )
+        save_schedule_message(event_id, schedule_channel.id, schedule_message.id, guild_id)
 
-    schedule_message = await schedule_channel.send(
-        f"日程調整: {event_id}\n"
-        f"締切: {build_deadline_text(deadline_settings['days_before'], deadline_settings['hour'])}\n"
-        "参加可否を回答するには、対象の日程ボタンを押してください。",
-        view=OpenScheduleView(event_id, guild_id, dates),
-    )
-    save_schedule_message(event_id, schedule_channel.id, schedule_message.id, guild_id)
-
-    result_message = await result_channel.send(
-        embed=create_result_embed(guild, event_id, dates),
-    )
-    save_result_message(event_id, result_channel.id, result_message.id, guild_id)
+        result_message = await result_channel.send(
+            embed=create_result_embed(guild, event_id, dates),
+        )
+        save_result_message(event_id, result_channel.id, result_message.id, guild_id)
+    except discord.DiscordException:
+        if schedule_message:
+            try:
+                await schedule_message.delete()
+            except discord.DiscordException:
+                pass
+        delete_event(event_id, guild_id)
+        raise
 
     return event_id, dates

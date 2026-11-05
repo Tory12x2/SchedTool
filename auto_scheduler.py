@@ -27,11 +27,13 @@ from database import (
     mark_participant_scan_run,
     mark_custom_announce_sent,
     mark_reminder_sent,
+    stop_auto_schedule,
     sync_event_participants,
     update_auto_schedule_next_start,
 )
 from participants import (
     PARTICIPANT_PAGE_SIZE,
+    get_channel_access_issue,
     get_participant_member_ids,
     is_participant_role_missing,
 )
@@ -71,17 +73,25 @@ async def auto_schedule_loop(client):
     await client.wait_until_ready()
 
     while not client.is_closed():
+        loop_started = time.monotonic()
+        for task_name, task in (
+            ("auto_schedule", run_auto_schedule_once),
+            ("deadline_close", run_deadline_close_once),
+            ("participant_growth", run_participant_growth_once),
+            ("available_day_reminder", run_available_day_reminder_once),
+            ("custom_announce", run_custom_announce_once),
+        ):
+            try:
+                await task(client)
+            except Exception as error:
+                log_error("auto_loop.task_failed", error, task=task_name)
+
         try:
-            loop_started = time.monotonic()
-            await run_auto_schedule_once(client)
-            await run_deadline_close_once(client)
-            await run_participant_growth_once(client)
-            await run_available_day_reminder_once(client)
-            await run_custom_announce_once(client)
             maybe_log_daily_health(client, datetime.now(TIMEZONE).date())
-            log_info("auto_loop.completed", elapsed_ms=elapsed_ms(loop_started))
         except Exception as error:
-            log_error("auto_loop.failed", error)
+            log_error("auto_loop.health_failed", error)
+
+        log_info("auto_loop.completed", elapsed_ms=elapsed_ms(loop_started))
 
         await sleep_until_next_hour()
 
@@ -110,7 +120,31 @@ async def run_auto_schedule_once(client):
         guild = client.get_guild(auto_settings["guild_id"])
         channel = client.get_channel(auto_settings["channel_id"])
         if not guild or not channel:
+            stop_auto_schedule(auto_settings["guild_id"])
             skipped_count += 1
+            log_warning(
+                "auto_schedule.disabled",
+                guild_id=auto_settings["guild_id"],
+                channel_id=auto_settings["channel_id"],
+                reason="channel_not_found",
+            )
+            continue
+
+        access_issue = get_channel_access_issue(
+            guild,
+            channel,
+            "自動作成の投稿先チャンネル",
+        )
+        if access_issue:
+            stop_auto_schedule(auto_settings["guild_id"])
+            skipped_count += 1
+            log_warning(
+                "auto_schedule.disabled",
+                guild_id=auto_settings["guild_id"],
+                channel_id=auto_settings["channel_id"],
+                reason="permission_denied",
+                detail=access_issue,
+            )
             continue
 
         try:
@@ -122,8 +156,16 @@ async def run_auto_schedule_once(client):
                 datetime.combine(next_start_date, datetime.min.time()),
                 schedule_settings["days"],
             )
-        except RuntimeError as error:
+        except (RuntimeError, discord.DiscordException) as error:
             skipped_count += 1
+            if isinstance(error, discord.Forbidden):
+                stop_auto_schedule(auto_settings["guild_id"])
+                log_warning(
+                    "auto_schedule.disabled",
+                    guild_id=auto_settings["guild_id"],
+                    channel_id=auto_settings["channel_id"],
+                    reason="permission_denied",
+                )
             log_warning(
                 "auto_schedule.skipped",
                 guild_id=auto_settings["guild_id"],
