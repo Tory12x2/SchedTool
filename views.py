@@ -371,7 +371,16 @@ class SetupView(discord.ui.View):
         row=0,
     )
     async def set_notification_channel(self, interaction, select):
-        channel = select.values[0]
+        selected_channel = select.values[0]
+        channel = interaction.guild.get_channel(selected_channel.id)
+        if not channel:
+            await interaction.response.send_message(
+                "選択したチャンネルを確認できませんでした。\n"
+                "`/notification_channel_setting` で通知チャンネルを設定してください。",
+                ephemeral=True,
+            )
+            return
+
         issue = get_channel_access_issue(
             interaction.guild,
             channel,
@@ -379,7 +388,9 @@ class SetupView(discord.ui.View):
         )
         if issue:
             await interaction.response.send_message(
-                f"{issue}\nBotへ権限を付与してから、もう一度選択してください。",
+                f"{issue}\nBotへ権限を付与してから、もう一度選択してください。\n"
+                "選択画面で設定できない場合は、"
+                "`/notification_channel_setting` でも設定できます。",
                 ephemeral=True,
             )
             return

@@ -17,7 +17,11 @@ def get_channel_access_issue(guild, channel, label):
     if not bot_member:
         return f"{label}でBotの権限を確認できません。"
 
-    permissions = channel.permissions_for(bot_member)
+    permissions_for = getattr(channel, "permissions_for", None)
+    if not callable(permissions_for):
+        return f"{label}でBotの権限を確認できません。"
+
+    permissions = permissions_for(bot_member)
     missing = [
         permission_label
         for permission_name, permission_label in CHANNEL_PERMISSION_LABELS.items()

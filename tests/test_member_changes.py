@@ -95,6 +95,11 @@ class FakeChannel:
         return member.permissions
 
 
+class FakeAppCommandChannel:
+    def __init__(self, channel_id):
+        self.id = channel_id
+
+
 class FakeBotMember:
     def __init__(self, permissions):
         self.permissions = permissions
@@ -119,6 +124,14 @@ class ChannelAccessTests(unittest.TestCase):
         channel = FakeChannel(902)
 
         self.assertIsNone(get_channel_access_issue(guild, channel, "通知チャンネル"))
+
+    def test_channel_without_permissions_for_is_reported_without_crashing(self):
+        guild = FakePermissionGuild(FakePermissions())
+        channel = FakeAppCommandChannel(903)
+
+        issue = get_channel_access_issue(guild, channel, "通知チャンネル")
+
+        self.assertIn("権限を確認できません", issue)
 
 
 class FakeClient:
