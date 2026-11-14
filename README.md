@@ -1,5 +1,7 @@
 # Schedule Tool
 
+運用・修正・VPS配備の引き継ぎ手順は[MAINTENANCE.md](MAINTENANCE.md)を参照してください。
+
 Discord用の日程調整Botです。
 
 [使い方はこちら](https://tory12x2.github.io/SchedTool/)
